@@ -80,44 +80,59 @@ async function downloadOne({ url, dest, expectedMinBytes, onProgress, label }) {
   return { ok: true, bytes: received, path: dest };
 }
 
-async function startDownload(onProgress) {
-  if (activeDownload) {
-    return { error: 'A download is already in progress.' };
+async function ensureLlamafile(onProgress) {
+  if (config.llamafileInstalled()) return { ok: true, skipped: true };
+  const res = await downloadOne({
+    url: config.LLAMAFILE_URL,
+    dest: config.llamafilePath(),
+    expectedMinBytes: 30_000_000,
+    onProgress,
+    label: 'runtime',
+  });
+  if (res.ok) {
+    try { fs.chmodSync(config.llamafilePath(), 0o755); } catch (_) {}
   }
+  return res;
+}
+
+async function downloadModel(modelId, onProgress) {
+  const m = config.findModel(modelId);
+  if (!m) return { error: `Unknown model id: ${modelId}` };
+  if (config.isModelInstalled(modelId)) return { ok: true, skipped: true };
+
+  if (activeDownload) return { error: 'A download is already in progress.' };
   activeDownload = { cancelled: false };
 
   try {
-    // 1) Download llamafile if not already installed (~42 MB).
-    if (!config.llamafileInstalled()) {
-      const res = await downloadOne({
-        url: config.LLAMAFILE_URL,
-        dest: config.llamafilePath(),
-        expectedMinBytes: 30_000_000,
-        onProgress,
-        label: 'runtime',
-      });
-      if (res.cancelled) { activeDownload = null; return { cancelled: true }; }
-      if (res.error) { activeDownload = null; return { error: 'Runtime download failed: ' + res.error }; }
-      try { fs.chmodSync(config.llamafilePath(), 0o755); } catch (_) {}
-    }
+    const runtimeRes = await ensureLlamafile(onProgress);
+    if (runtimeRes.cancelled) { activeDownload = null; return { cancelled: true }; }
+    if (runtimeRes.error) { activeDownload = null; return { error: 'Runtime: ' + runtimeRes.error }; }
 
-    // 2) Download the GGUF model (~4.7 GB).
-    if (!config.modelInstalled()) {
-      const res = await downloadOne({
-        url: config.DEFAULT_MODEL_URL,
-        dest: config.modelPath(),
-        expectedMinBytes: config.DEFAULT_MODEL_BYTES,
-        onProgress,
-        label: 'model',
-      });
-      if (res.cancelled) { activeDownload = null; return { cancelled: true }; }
-      if (res.error) { activeDownload = null; return { error: 'Model download failed: ' + res.error }; }
-    }
-
+    const modelRes = await downloadOne({
+      url: m.url,
+      dest: config.modelPath(modelId),
+      expectedMinBytes: m.minBytes,
+      onProgress,
+      label: 'model',
+    });
     activeDownload = null;
-    return { ok: true };
+    if (modelRes.cancelled) return { cancelled: true };
+    if (modelRes.error) return { error: 'Model: ' + modelRes.error };
+    return { ok: true, modelId };
   } catch (err) {
     activeDownload = null;
+    return { error: err.message };
+  }
+}
+
+async function deleteModel(modelId) {
+  const m = config.findModel(modelId);
+  if (!m) return { error: 'Unknown model id' };
+  try {
+    fs.unlinkSync(config.modelPath(modelId));
+    return { ok: true };
+  } catch (err) {
+    if (err.code === 'ENOENT') return { ok: true };
     return { error: err.message };
   }
 }
@@ -127,4 +142,11 @@ function cancelDownload() {
   return { ok: true };
 }
 
-module.exports = { startDownload, cancelDownload };
+// Back-compat: existing setup screen calls modelDownload() with no args. Route
+// to recommended-model download.
+async function startDownload(onProgress) {
+  const recommended = config.getActiveModelId() || config.recommendModelId();
+  return downloadModel(recommended, onProgress);
+}
+
+module.exports = { startDownload, downloadModel, deleteModel, cancelDownload };

@@ -94,13 +94,8 @@ $('#btn-download-model').addEventListener('click', async () => {
   }
 });
 $('#btn-cancel-download').addEventListener('click', () => window.bones.modelCancel());
-window.bones.onModelProgress((p) => {
-  const pct = Math.round((p.pct || 0) * 100);
-  $('#progress-fill').style.width = pct + '%';
-  const mb = (n) => (n / 1024 / 1024).toFixed(0);
-  const stage = p.label === 'runtime' ? 'runtime' : 'model';
-  $('#progress-text').textContent = `${stage}: ${pct}% · ${mb(p.received)} / ${mb(p.total)} MB`;
-});
+// Note: onModelProgress is wired below, in the Settings section. Single handler
+// covers both the setup-screen progress bar and the per-card download bars.
 
 // ===== CHAT =====
 
@@ -458,13 +453,117 @@ async function refreshBrain() {
 async function refreshSettings() {
   const s = await window.bones.serverStatus();
   const lines = [];
-  lines.push(s.modelInstalled ? 'Model file present.' : 'Model file missing — open the setup screen.');
-  lines.push(s.binary ? `llamafile binary: ${s.binary}` : 'llamafile binary not found.');
+  lines.push(`Active model: <strong>${escapeHtml(s.activeModelId || '?')}</strong>`);
+  lines.push(s.modelInstalled ? 'Model file present.' : 'Model file missing.');
+  lines.push(s.binary ? `llamafile binary: ${escapeHtml(s.binary)}` : 'llamafile binary not found.');
   lines.push(s.ready ? `Server ready on 127.0.0.1:${s.port}.` : 'Server not running.');
-  if (s.error) lines.push('Last error: ' + s.error.message);
-  $('#model-state').innerHTML = lines.map((l) => escapeHtml(l)).join('<br>');
+  if (s.error) lines.push('Last error: ' + escapeHtml(s.error.message));
+  $('#model-state').innerHTML = lines.join('<br>');
   refreshLog();
+  refreshModelList();
 }
+
+async function refreshModelList() {
+  const [hw, list] = await Promise.all([
+    window.bones.modelHardware(),
+    window.bones.modelList(),
+  ]);
+  $('#hw-summary').textContent =
+    `This Mac: ${hw.ramGB} GB RAM · ${hw.cpus} CPU threads · ${hw.arch === 'arm64' ? 'Apple Silicon' : 'Intel'}. Recommended: ${hw.recommended}.`;
+
+  const root = $('#model-list');
+  root.innerHTML = '';
+  for (const m of list) {
+    const isActive = m.id === hw.active;
+    const isRecommended = m.id === hw.recommended;
+    const card = document.createElement('div');
+    card.className = 'model-card' + (isActive ? ' active' : '');
+    card.dataset.modelId = m.id;
+
+    const badges = [];
+    if (isActive) badges.push('<span class="badge active">active</span>');
+    if (isRecommended && !isActive) badges.push('<span class="badge recommended">recommended</span>');
+
+    const actions = [];
+    if (!m.installed) {
+      actions.push(`<button class="primary btn-dl" data-id="${m.id}">Download (${m.sizeLabel})</button>`);
+    } else {
+      if (!isActive) actions.push(`<button class="btn-activate" data-id="${m.id}">Make active</button>`);
+      actions.push(`<button class="btn-delete-model" data-id="${m.id}">Delete</button>`);
+    }
+
+    card.innerHTML = `
+      <div class="info">
+        <div class="title">${escapeHtml(m.name)} ${badges.join(' ')}</div>
+        <div class="meta">${escapeHtml(m.short)} · ${m.sizeLabel} · needs ≥${m.minRamGB} GB RAM</div>
+        <div class="notes">${escapeHtml(m.notes)}</div>
+        <div class="progress"><div class="fill"></div></div>
+      </div>
+      <div class="actions">${actions.join('')}</div>
+    `;
+    root.appendChild(card);
+  }
+
+  $$('.btn-dl').forEach((b) =>
+    b.addEventListener('click', () => downloadModelAndUI(b.dataset.id))
+  );
+  $$('.btn-activate').forEach((b) =>
+    b.addEventListener('click', async () => {
+      setStatus('switching model…', 'warn');
+      const r = await window.bones.modelSetActive(b.dataset.id);
+      if (r && r.error) setStatus('switch failed: ' + r.error, 'err');
+      refreshSettings();
+    })
+  );
+  $$('.btn-delete-model').forEach((b) =>
+    b.addEventListener('click', async () => {
+      if (!confirm(`Delete the ${b.dataset.id} model file from disk?`)) return;
+      await window.bones.modelDelete(b.dataset.id);
+      refreshSettings();
+    })
+  );
+}
+
+async function downloadModelAndUI(modelId) {
+  const card = document.querySelector(`.model-card[data-model-id="${modelId}"]`);
+  if (card) {
+    const btn = card.querySelector('.btn-dl');
+    if (btn) btn.disabled = true;
+    const prog = card.querySelector('.progress');
+    if (prog) prog.classList.add('active');
+  }
+  setStatus(`downloading ${modelId}…`, 'warn');
+  const res = await window.bones.modelDownloadSpecific(modelId);
+  if (res && res.ok) {
+    setStatus(`${modelId} ready`, 'ok');
+  } else if (res && res.cancelled) {
+    setStatus('cancelled', 'warn');
+  } else {
+    setStatus('download failed', 'err');
+    alert('Download failed: ' + (res && res.error ? res.error : 'unknown'));
+  }
+  refreshSettings();
+}
+
+// Wire per-card progress for model downloads
+window.bones.onModelProgress((p) => {
+  // Setup screen progress (kept working)
+  const pct = Math.round((p.pct || 0) * 100);
+  const fillTop = $('#progress-fill');
+  if (fillTop) fillTop.style.width = pct + '%';
+  const mb = (n) => (n / 1024 / 1024).toFixed(0);
+  const stage = p.label === 'runtime' ? 'runtime' : 'model';
+  const text = $('#progress-text');
+  if (text) text.textContent = `${stage}: ${pct}% · ${mb(p.received)} / ${mb(p.total)} MB`;
+  // Per-card progress in Settings (when downloading a specific model)
+  if (p.modelId) {
+    const card = document.querySelector(`.model-card[data-model-id="${p.modelId}"]`);
+    if (card) {
+      const fill = card.querySelector('.progress .fill');
+      if (fill) fill.style.width = pct + '%';
+    }
+  }
+});
 
 async function refreshLog() {
   const tail = await window.bones.serverLogTail();
@@ -490,5 +589,18 @@ async function refreshStatus() {
   applyServerStatus(s);
 }
 
+async function populateSetupCard() {
+  try {
+    const hw = await window.bones.modelHardware();
+    const list = await window.bones.modelList();
+    const m = list.find((x) => x.id === hw.recommended) || list[0];
+    if (m) {
+      $('#setup-model-name').textContent = m.name;
+      $('#setup-model-size').textContent = m.sizeLabel;
+    }
+  } catch (_) {}
+}
+
 refreshStatus();
 refreshChatList();
+populateSetupCard();

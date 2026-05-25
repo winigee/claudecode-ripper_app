@@ -40,8 +40,9 @@
           <p>BonesAI runs an AI model locally on this Mac. Nothing leaves the machine.</p>
           <p class="muted">
             Two pieces are downloaded once and stored under Application Support:
-            <br>1. <strong>llamafile runtime</strong> (~42 MB, from Mozilla's GitHub release).
-            <br>2. <strong>Qwen2.5-7B-Instruct Q4_K_M</strong> (~4.7 GB, from Hugging Face).
+            <br>1. <strong>llamafile runtime</strong> (~42 MB).
+            <br>2. <strong id="setup-model-name">A model</strong> for this Mac (<span id="setup-model-size">~ ?</span>).
+            <br><span class="muted" style="font-size:11px">You can install other models later from Settings.</span>
           </p>
           <div id="setup-progress" hidden>
             <div class="progress-bar"><div id="progress-fill"></div></div>
@@ -123,7 +124,13 @@
         </div>
 
         <div class="setting">
-          <label>About BonesAI v2.1.1</label>
+          <label>Available models</label>
+          <p class="hint" id="hw-summary">Detecting hardware…</p>
+          <div id="model-list" class="model-list"></div>
+        </div>
+
+        <div class="setting">
+          <label>About BonesAI v2.1.2</label>
           <p class="hint">
             <strong>Local-first.</strong> All inference runs on this Mac via llamafile + Qwen2.5-7B-Instruct.
             No network call is made during ordinary use.

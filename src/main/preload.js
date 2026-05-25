@@ -7,6 +7,11 @@ contextBridge.exposeInMainWorld('bones', {
   serverLogTail: () => ipcRenderer.invoke('server:log-tail'),
   onServerStatus: (cb) => ipcRenderer.on('server:status', (_e, s) => cb(s)),
   modelDownload: () => ipcRenderer.invoke('model:download'),
+  modelDownloadSpecific: (id) => ipcRenderer.invoke('model:download-specific', id),
+  modelDelete: (id) => ipcRenderer.invoke('model:delete', id),
+  modelList: () => ipcRenderer.invoke('model:list'),
+  modelHardware: () => ipcRenderer.invoke('model:hardware'),
+  modelSetActive: (id) => ipcRenderer.invoke('model:set-active', id),
   modelCancel: () => ipcRenderer.invoke('model:cancel'),
   onModelProgress: (cb) => ipcRenderer.on('model:progress', (_e, p) => cb(p)),
 

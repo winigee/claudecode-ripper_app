@@ -5,6 +5,7 @@ const config = require('./config');
 const llamaServer = require('./llama-server');
 const llama = require('./llama');
 const modelDownload = require('./model-download');
+
 const ingest = require('./ingest');
 const brain = require('./brain');
 const chats = require('./chats');
@@ -137,18 +138,47 @@ ipcMain.handle('model:download', async (event) => {
     try { event.sender.send('model:progress', p); } catch (_) {}
   };
   const res = await modelDownload.startDownload(send);
-  // Do NOT block on llamaServer.start() here. Kick it off in the background
-  // and return immediately so the renderer can dismiss the setup modal.
   if (res.ok) {
     setImmediate(async () => {
       try { event.sender.send('server:status', llamaServer.status()); } catch (_) {}
-      try {
-        await llamaServer.start();
-      } catch (_) {}
+      try { await llamaServer.start(); } catch (_) {}
       try { event.sender.send('server:status', llamaServer.status()); } catch (_) {}
     });
   }
   return res;
+});
+
+ipcMain.handle('model:download-specific', async (event, modelId) => {
+  const send = (p) => {
+    try { event.sender.send('model:progress', { ...p, modelId }); } catch (_) {}
+  };
+  const res = await modelDownload.downloadModel(modelId, send);
+  try { event.sender.send('server:status', llamaServer.status()); } catch (_) {}
+  return res;
+});
+
+ipcMain.handle('model:delete', (_e, modelId) => modelDownload.deleteModel(modelId));
+
+ipcMain.handle('model:list', () => config.listModels());
+
+ipcMain.handle('model:hardware', () => ({
+  ...config.detectHardware(),
+  recommended: config.recommendModelId(),
+  active: config.getActiveModelId(),
+}));
+
+ipcMain.handle('model:set-active', async (event, modelId) => {
+  if (!config.findModel(modelId)) return { error: 'Unknown model id' };
+  if (!config.isModelInstalled(modelId)) return { error: 'Model not installed yet' };
+  config.setActiveModelId(modelId);
+  // Restart server with new model
+  llamaServer.stop();
+  try { event.sender.send('server:status', llamaServer.status()); } catch (_) {}
+  setImmediate(async () => {
+    try { await llamaServer.start(); } catch (_) {}
+    try { event.sender.send('server:status', llamaServer.status()); } catch (_) {}
+  });
+  return { ok: true, activeModelId: modelId };
 });
 
 ipcMain.handle('model:cancel', () => modelDownload.cancelDownload());

@@ -128,13 +128,14 @@ async function start() {
     logLine('start failed: ' + startError.message);
     throw startError;
   }
-  const model = config.modelPath();
+  const model = config.activeModelPath();
   if (!fs.existsSync(model)) {
     startError = new Error(`Model file not found at ${model}`);
     startError.code = 'NO_MODEL';
     logLine('start failed: ' + startError.message);
     throw startError;
   }
+  logLine(`active model: ${config.getActiveModelId()}`);
 
   // Make sure the binary is executable and not quarantined.
   try {
@@ -222,7 +223,8 @@ function status() {
     binary: llamafileBinary(),
     llamafileInstalled: config.llamafileInstalled() || !!llamafileBinary(),
     modelInstalled: config.modelInstalled(),
-    modelPath: config.modelPath(),
+    activeModelId: config.getActiveModelId(),
+    modelPath: config.activeModelPath(),
     logFilePath: logFilePath(),
     error: startError ? { message: startError.message, code: startError.code || null } : null,
   };
