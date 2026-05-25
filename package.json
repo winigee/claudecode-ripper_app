@@ -1,0 +1,54 @@
+{
+  "name": "bonesai",
+  "productName": "BonesAI",
+  "version": "0.6.0",
+  "description": "Personal desktop tool that wraps the Claude API for document summarisation and research.",
+  "main": "src/main/main.js",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --mac --x64 --dir",
+    "dist": "electron-builder --mac --x64",
+    "dist:universal": "electron-builder --mac --universal"
+  },
+  "author": "Winston Green",
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.65.0",
+    "mammoth": "^1.8.0",
+    "pdf-parse": "^1.1.1"
+  },
+  "devDependencies": {
+    "electron": "28.3.3",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.winstongreen.bonesai",
+    "productName": "BonesAI",
+    "copyright": "Copyright © 2026 Winston Green",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/*.map"
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dir",
+          "arch": ["x64"]
+        }
+      ],
+      "minimumSystemVersion": "11.0.0",
+      "identity": null,
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    }
+  }
+}
