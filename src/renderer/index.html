@@ -4,32 +4,40 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
     />
     <title>BonesAI</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <header>
+    <aside class="sidebar">
       <div class="brand">
         <span class="brand-bone">BONE</span><span class="brand-ai">SAI</span>
       </div>
-      <nav>
-        <button data-tab="work" class="tab active">Work</button>
+
+      <button id="btn-new-chat" class="new-chat">+ New chat</button>
+
+      <div class="chat-list-wrap">
+        <div class="sidebar-label">CHATS</div>
+        <div id="chat-list"></div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <button data-tab="chat" class="tab active">Chat</button>
+        <button data-tab="work" class="tab">Work</button>
         <button data-tab="brain" class="tab">Brain</button>
         <button data-tab="settings" class="tab">Settings</button>
       </nav>
+
       <div class="status" id="status">starting…</div>
-    </header>
+    </aside>
 
     <main>
-      <!-- Setup screen: shown only when model is missing -->
+      <!-- Setup screen: shown only when a required file is missing -->
       <section id="setup" class="setup-panel" hidden>
         <div class="setup-card">
           <h1>One-time setup</h1>
-          <p>
-            BonesAI runs an AI model locally on this Mac. Nothing leaves the machine.
-          </p>
+          <p>BonesAI runs an AI model locally on this Mac. Nothing leaves the machine.</p>
           <p class="muted">
             Two pieces are downloaded once and stored under Application Support:
             <br>1. <strong>llamafile runtime</strong> (~42 MB, from Mozilla's GitHub release).
@@ -47,8 +55,29 @@
         </div>
       </section>
 
+      <!-- Chat tab -->
+      <section id="tab-chat" class="tab-panel active">
+        <div id="chat-messages" class="chat-messages">
+          <div class="chat-empty muted">
+            <svg class="skull-static" viewBox="0 0 100 100" width="120" height="120">
+              <use href="#skull-svg" />
+            </svg>
+            <p>Ask anything. Conversations are saved locally.</p>
+          </div>
+        </div>
+        <form id="chat-form" class="chat-form">
+          <textarea id="chat-input" placeholder="Ask BonesAI… (⌘↩ to send)" rows="2"></textarea>
+          <div class="chat-form-row">
+            <button type="button" id="btn-chat-cancel" hidden>Cancel</button>
+            <button type="submit" id="btn-chat-send" class="primary">Send</button>
+          </div>
+        </form>
+      </section>
+
       <!-- Work tab -->
-      <section id="tab-work" class="tab-panel active">
+      <section id="tab-work" class="tab-panel">
+        <h2>Work</h2>
+        <p class="hint">Drag a folder or files for a structured summary or compact.</p>
         <div id="dropzone">
           <p>Drag a folder or files here, or paste text below.</p>
           <div class="dz-buttons">
@@ -57,29 +86,17 @@
             <button id="btn-clear-files">Clear</button>
           </div>
         </div>
-
         <div id="files-summary"></div>
-
-        <textarea
-          id="paste-area"
-          placeholder="Or paste content here (overrides dropped files if non-empty)."
-        ></textarea>
-
+        <textarea id="paste-area" placeholder="Or paste content here (overrides dropped files if non-empty)."></textarea>
         <div class="row">
-          <input
-            id="instructions"
-            type="text"
-            placeholder="Optional: additional instructions (e.g. 'focus on the legal arguments')"
-          />
+          <input id="instructions" type="text" placeholder="Optional: additional instructions" />
         </div>
-
         <div class="actions">
           <button id="btn-summarise" class="primary">Summarise</button>
           <button id="btn-compact">Compact</button>
           <button id="btn-cancel" hidden>Cancel</button>
           <button id="btn-save-brain" disabled>Save to Brain</button>
         </div>
-
         <pre id="output"></pre>
       </section>
 
@@ -106,20 +123,17 @@
         </div>
 
         <div class="setting">
-          <label>About BonesAI v0.7.0</label>
+          <label>About BonesAI v2.1.1</label>
           <p class="hint">
-            <strong>Local-first.</strong> All summarising and compacting runs on this Mac via
-            <code>llama.cpp</code> + Qwen2.5-7B-Instruct. No network call is made during
-            ordinary use.
+            <strong>Local-first.</strong> All inference runs on this Mac via llamafile + Qwen2.5-7B-Instruct.
+            No network call is made during ordinary use.
           </p>
           <p class="hint">
-            <strong>No Claude API in this version.</strong> Cloud calls are reintroduced in
-            v0.8.0, gated behind an anonymisation review step. Until then the API key field is
-            intentionally absent.
+            v2.1.1 adds the Chat tab and a left-sidebar layout. Internet access for the model
+            arrives in v2.1.2 as an opt-in feature.
           </p>
           <p class="hint">
-            Configuration and Brain notes live under <code>~/Library/Application Support/BonesAI/</code>.
-            The model file is at <code>models/Qwen2.5-7B-Instruct-Q4_K_M.gguf</code>.
+            Configuration, Brain notes, and chat history live under <code>~/Library/Application Support/BonesAI/</code>.
           </p>
         </div>
 
@@ -130,6 +144,34 @@
         </div>
       </section>
     </main>
+
+    <!-- Reusable inline SVG: skull-and-crossbones, line-art -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+      <defs>
+        <symbol id="skull-svg" viewBox="0 0 100 100">
+          <g fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">
+            <!-- crossbones (back) -->
+            <line x1="14" y1="78" x2="86" y2="22" opacity="0.55" />
+            <circle cx="14" cy="78" r="5" opacity="0.55" />
+            <circle cx="86" cy="22" r="5" opacity="0.55" />
+            <line x1="14" y1="22" x2="86" y2="78" opacity="0.55" />
+            <circle cx="14" cy="22" r="5" opacity="0.55" />
+            <circle cx="86" cy="78" r="5" opacity="0.55" />
+            <!-- skull -->
+            <path d="M 30 30 Q 30 16 50 16 Q 70 16 70 30 L 70 50 Q 70 60 62 64 L 60 70 L 40 70 L 38 64 Q 30 60 30 50 Z" fill="#0a1426" />
+            <!-- eyes -->
+            <circle cx="40" cy="42" r="5" fill="currentColor" />
+            <circle cx="60" cy="42" r="5" fill="currentColor" />
+            <!-- nose -->
+            <path d="M 50 50 L 47 56 L 53 56 Z" fill="currentColor" stroke="none" />
+            <!-- teeth -->
+            <line x1="44" y1="64" x2="44" y2="70" />
+            <line x1="50" y1="64" x2="50" y2="70" />
+            <line x1="56" y1="64" x2="56" y2="70" />
+          </g>
+        </symbol>
+      </defs>
+    </svg>
 
     <script src="renderer.js"></script>
   </body>

@@ -7,6 +7,7 @@ const llama = require('./llama');
 const modelDownload = require('./model-download');
 const ingest = require('./ingest');
 const brain = require('./brain');
+const chats = require('./chats');
 
 let mainWindow = null;
 const activeRuns = new Map();
@@ -235,3 +236,27 @@ ipcMain.handle('ingest:pick-folder', async () => {
 ipcMain.handle('brain:list', () => brain.listNotes());
 ipcMain.handle('brain:add', (_e, note) => brain.addNote(note || {}));
 ipcMain.handle('brain:delete', (_e, id) => ({ ok: brain.deleteNote(id) }));
+
+// --- Chat ---
+
+ipcMain.handle('chat:list', () => chats.list());
+ipcMain.handle('chat:load', (_e, id) => chats.load(id));
+ipcMain.handle('chat:save', (_e, chat) => chats.save(chat || {}));
+ipcMain.handle('chat:delete', (_e, id) => ({ ok: chats.remove(id) }));
+ipcMain.handle('chat:rename', (_e, { id, title }) => chats.rename(id, title));
+
+ipcMain.handle('llama:chat', async (event, payload, runId) => {
+  const ctrl = new AbortController();
+  activeRuns.set(runId, ctrl);
+  try {
+    const onToken = (t) => {
+      try { event.sender.send('llama:token', { runId, delta: t }); } catch (_) {}
+    };
+    return await llama.chat(payload, { onToken, signal: ctrl.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') return { error: { message: 'Cancelled', code: 'CANCELLED' } };
+    return errorPayload(err);
+  } finally {
+    activeRuns.delete(runId);
+  }
+});

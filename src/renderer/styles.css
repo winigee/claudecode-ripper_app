@@ -1,9 +1,10 @@
-/* BonesAI v0.7.0 — cyan-on-deep-blue tech-noir, matching the chosen app icon. */
+/* BonesAI v2.1.1 — sidebar layout, chat UI, spinning skull. */
 
 :root {
   --bg: #0a1426;
   --bg-2: #0f1c33;
   --bg-3: #14253f;
+  --bg-side: #0a1830;
   --border: #1f3458;
   --border-hi: #2c4d7a;
   --text: #d5e6ff;
@@ -12,6 +13,8 @@
   --accent: #4cc7ff;
   --accent-2: #62e0ff;
   --accent-dim: #2b6e94;
+  --bubble-user: #1a3257;
+  --bubble-agent: #0f2240;
   --ok: #5cd2a8;
   --err: #ff7b7b;
   --warn: #f0c46b;
@@ -21,133 +24,275 @@
 html, body { margin: 0; padding: 0; height: 100%; }
 
 /* HTML `hidden` attribute must win over any display: flex/grid/block on the
-   same element. Without this, .setup-panel's `display: flex` overrode hidden
-   and the setup modal stayed visible even when JS set $('#setup').hidden = true.
-   This was the root cause of "the modal keeps coming back" in v0.7.0–v0.7.3. */
+   same element. Critical for the setup modal and other hidden panels. */
 [hidden] { display: none !important; }
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   background: radial-gradient(circle at 20% 0%, #0e1d36 0%, var(--bg) 60%);
   color: var(--text);
   font-size: 14px;
   display: flex;
-  flex-direction: column;
   height: 100vh;
   overflow: hidden;
 }
 
-header {
+/* --- Sidebar --- */
+
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  background: linear-gradient(180deg, #0c1a33 0%, #0a1426 100%);
+  border-right: 1px solid var(--border);
   display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 10px 18px;
-  background: linear-gradient(180deg, #112241, #0c1a33);
-  border-bottom: 1px solid var(--border);
+  flex-direction: column;
   -webkit-app-region: drag;
 }
-header button, header input, header select, .tab { -webkit-app-region: no-drag; }
+.sidebar button, .sidebar input, .sidebar select { -webkit-app-region: no-drag; }
 
 .brand {
   font-weight: 700;
   letter-spacing: 1.5px;
   font-size: 16px;
+  padding: 18px 16px 12px;
   text-shadow: 0 0 10px rgba(76, 199, 255, 0.25);
 }
 .brand-bone { color: var(--text); }
 .brand-ai { color: var(--accent); }
 
-nav { display: flex; gap: 6px; }
+.new-chat {
+  margin: 0 12px 8px;
+  background: linear-gradient(180deg, #1c4f78, #14385a);
+  border: 1px solid var(--accent);
+  color: var(--accent-2);
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  letter-spacing: 0.2px;
+  box-shadow: 0 0 12px rgba(76, 199, 255, 0.18);
+}
+.new-chat:hover {
+  background: linear-gradient(180deg, #1f5d8a, #18416a);
+  box-shadow: 0 0 16px rgba(76, 199, 255, 0.3);
+}
+
+.sidebar-label {
+  font-size: 10px;
+  letter-spacing: 1.4px;
+  color: var(--muted);
+  padding: 8px 16px 4px;
+}
+
+.chat-list-wrap {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+#chat-list {
+  padding: 0 8px;
+}
+.chat-row {
+  padding: 8px 10px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 12.5px;
+  color: var(--text-dim);
+  line-height: 1.35;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+}
+.chat-row:hover {
+  background: var(--bg-3);
+  color: var(--text);
+}
+.chat-row.active {
+  background: var(--bg-3);
+  color: var(--accent);
+  border-left: 2px solid var(--accent);
+  padding-left: 8px;
+}
+.chat-row-title {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-row-del {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  cursor: pointer;
+  visibility: hidden;
+}
+.chat-row:hover .chat-row-del { visibility: visible; }
+.chat-row-del:hover { color: var(--err); background: rgba(255, 123, 123, 0.1); }
+
+.sidebar-nav {
+  border-top: 1px solid var(--border);
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
 .tab {
   background: transparent;
   color: var(--text-dim);
   border: 1px solid transparent;
-  padding: 5px 12px;
-  border-radius: 4px;
+  padding: 7px 12px;
+  border-radius: 5px;
   cursor: pointer;
-  font-size: 12.5px;
+  font-size: 13px;
   letter-spacing: 0.3px;
+  text-align: left;
 }
 .tab:hover { background: var(--bg-3); color: var(--text); }
 .tab.active {
   background: var(--bg-3);
   color: var(--accent);
   border-color: var(--border-hi);
-  box-shadow: 0 0 8px rgba(76, 199, 255, 0.15) inset;
 }
 
 .status {
-  margin-left: auto;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--muted);
   font-family: ui-monospace, Menlo, monospace;
+  padding: 8px 14px 14px;
+  border-top: 1px solid var(--border);
+  line-height: 1.45;
 }
 .status.ok { color: var(--ok); }
 .status.err { color: var(--err); }
 .status.warn { color: var(--warn); }
 
-main { flex: 1; overflow: auto; padding: 18px; }
+/* --- Main content area --- */
 
-.tab-panel { display: none; }
-.tab-panel.active { display: block; }
-
-/* Setup screen */
-.setup-panel {
-  position: fixed;
-  inset: 50px 0 0 0;
-  background: rgba(10, 20, 38, 0.97);
+main {
+  flex: 1;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-}
-.setup-card {
-  background: var(--bg-2);
-  border: 1px solid var(--border-hi);
-  border-radius: 8px;
-  padding: 28px 32px;
-  max-width: 540px;
-  box-shadow: 0 0 30px rgba(76, 199, 255, 0.08);
-}
-.setup-card h1 {
-  margin: 0 0 12px 0;
-  font-size: 20px;
-  color: var(--accent);
-  letter-spacing: 0.5px;
-}
-.setup-actions { margin-top: 18px; display: flex; gap: 10px; }
-.progress-bar {
-  width: 100%;
-  height: 10px;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: 5px;
+  flex-direction: column;
+  position: relative;
   overflow: hidden;
-  margin-top: 14px;
 }
-#progress-fill {
-  height: 100%;
-  width: 0;
-  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
-  transition: width 0.2s;
-}
-#progress-text { margin-top: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
 
-#dropzone {
-  border: 2px dashed var(--border-hi);
-  border-radius: 8px;
-  padding: 26px;
-  text-align: center;
-  color: var(--text-dim);
-  transition: background 0.15s, border-color 0.15s;
-  background: rgba(20, 37, 63, 0.4);
+.tab-panel {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 28px;
+  min-height: 0;
 }
-#dropzone.dragover {
-  background: rgba(76, 199, 255, 0.08);
-  border-color: var(--accent);
+.tab-panel.active { display: flex; flex-direction: column; }
+
+#tab-chat {
+  padding: 0;
+}
+
+/* --- Chat --- */
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.chat-empty {
+  margin: auto;
+  text-align: center;
+  color: var(--muted);
+}
+.chat-empty .skull-static {
+  opacity: 0.4;
+  margin-bottom: 16px;
+  color: var(--accent);
+}
+
+.bubble {
+  max-width: 760px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  font-size: 13.5px;
+}
+.bubble.user {
+  align-self: flex-end;
+  background: var(--bubble-user);
+  border: 1px solid var(--border-hi);
   color: var(--text);
 }
-#dropzone p { margin: 0 0 12px 0; }
-.dz-buttons { display: flex; gap: 8px; justify-content: center; }
+.bubble.agent {
+  align-self: flex-start;
+  background: var(--bubble-agent);
+  border: 1px solid var(--border);
+  color: var(--text);
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.bubble.agent .bubble-content {
+  flex: 1;
+  min-width: 0;
+}
+.bubble.agent .skull-spin {
+  flex-shrink: 0;
+  margin-top: 2px;
+  color: var(--accent);
+}
+.bubble.agent.thinking {
+  font-style: italic;
+  color: var(--text-dim);
+}
+
+@keyframes skull-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.skull-spin {
+  animation: skull-spin 2s linear infinite;
+  filter: drop-shadow(0 0 6px rgba(76, 199, 255, 0.35));
+}
+
+.chat-form {
+  border-top: 1px solid var(--border);
+  padding: 14px 28px;
+  background: var(--bg);
+}
+.chat-form textarea {
+  width: 100%;
+  background: var(--bg-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13.5px;
+  resize: none;
+  line-height: 1.5;
+}
+.chat-form textarea:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+  box-shadow: 0 0 8px rgba(76, 199, 255, 0.15);
+}
+.chat-form-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+/* --- Buttons --- */
 
 button {
   background: var(--bg-3);
@@ -172,6 +317,67 @@ button.primary:hover {
   background: linear-gradient(180deg, #1f5d8a, #18416a);
   box-shadow: 0 0 16px rgba(76, 199, 255, 0.3);
 }
+
+/* --- Setup modal --- */
+
+.setup-panel {
+  position: fixed;
+  inset: 0;
+  background: rgba(10, 20, 38, 0.97);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+}
+.setup-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border-hi);
+  border-radius: 8px;
+  padding: 28px 32px;
+  max-width: 540px;
+  box-shadow: 0 0 30px rgba(76, 199, 255, 0.08);
+}
+.setup-card h1 {
+  margin: 0 0 12px 0;
+  font-size: 20px;
+  color: var(--accent);
+}
+.setup-actions { margin-top: 18px; display: flex; gap: 10px; }
+.progress-bar {
+  width: 100%;
+  height: 10px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  overflow: hidden;
+  margin-top: 14px;
+}
+#progress-fill {
+  height: 100%;
+  width: 0;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent));
+  transition: width 0.2s;
+}
+#progress-text { margin-top: 6px; font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+
+/* --- Work tab --- */
+
+#dropzone {
+  border: 2px dashed var(--border-hi);
+  border-radius: 8px;
+  padding: 26px;
+  text-align: center;
+  color: var(--text-dim);
+  background: rgba(20, 37, 63, 0.4);
+  transition: background 0.15s, border-color 0.15s;
+}
+#dropzone.dragover {
+  background: rgba(76, 199, 255, 0.08);
+  border-color: var(--accent);
+  color: var(--text);
+}
+#dropzone p { margin: 0 0 12px 0; }
+.dz-buttons { display: flex; gap: 8px; justify-content: center; }
 
 #files-summary {
   margin: 12px 0;
@@ -215,13 +421,11 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   padding: 14px;
   border-color: var(--border-hi);
 }
-#output.streaming {
-  border-color: var(--accent-dim);
-  box-shadow: 0 0 12px rgba(76, 199, 255, 0.12) inset;
-}
 
 .row { display: flex; gap: 8px; margin: 8px 0; }
 .actions { display: flex; gap: 8px; margin: 12px 0; }
+
+/* --- Settings & Brain --- */
 
 .setting {
   margin: 18px 0;

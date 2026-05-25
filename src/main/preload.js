@@ -26,4 +26,12 @@ contextBridge.exposeInMainWorld('bones', {
   brainList: () => ipcRenderer.invoke('brain:list'),
   brainAdd: (note) => ipcRenderer.invoke('brain:add', note),
   brainDelete: (id) => ipcRenderer.invoke('brain:delete', id),
+
+  // Chat
+  chatList: () => ipcRenderer.invoke('chat:list'),
+  chatLoad: (id) => ipcRenderer.invoke('chat:load', id),
+  chatSave: (chat) => ipcRenderer.invoke('chat:save', chat),
+  chatDelete: (id) => ipcRenderer.invoke('chat:delete', id),
+  chatRename: (id, title) => ipcRenderer.invoke('chat:rename', { id, title }),
+  chatStream: (payload, runId) => ipcRenderer.invoke('llama:chat', payload, runId),
 });

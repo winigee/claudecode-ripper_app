@@ -135,6 +135,61 @@ async function compact({ content, instructions }, { onToken, signal } = {}) {
   return { text, truncated, model: 'qwen2.5-7b-instruct-q4_k_m' };
 }
 
+const CHAT_SYSTEM = `You are BonesAI, a helpful assistant running locally on the user's Mac. Be concise, accurate, and direct. If you don't know something, say so. Do not pretend to have access to information you don't have. Today's conversation is private to this user — nothing leaves the machine.`;
+
+async function chat({ messages }, { onToken, signal } = {}) {
+  const port = llamaServer.getPort();
+  if (!port) throw new Error('llama-server is not running.');
+
+  const wireMessages = [{ role: 'system', content: CHAT_SYSTEM }, ...messages];
+
+  const resp = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: 'local',
+      stream: true,
+      temperature: 0.7,
+      messages: wireMessages,
+    }),
+    signal,
+  });
+
+  if (!resp.ok) {
+    const body = await resp.text().catch(() => '');
+    throw new Error(`llama-server ${resp.status}: ${body.slice(0, 200)}`);
+  }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let full = '';
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let idx;
+    while ((idx = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, idx).trim();
+      buf = buf.slice(idx + 1);
+      if (!line.startsWith('data:')) continue;
+      const payload = line.slice(5).trim();
+      if (payload === '[DONE]') continue;
+      try {
+        const obj = JSON.parse(payload);
+        const delta = obj.choices?.[0]?.delta?.content;
+        if (delta) {
+          full += delta;
+          if (onToken) onToken(delta);
+        }
+      } catch (_) {}
+    }
+  }
+
+  return { text: full, model: 'qwen2.5-7b-instruct-q4_k_m' };
+}
+
 async function ping() {
   const text = await chatStream({
     system: 'You are a test endpoint. Reply with the single word: pong',
@@ -143,4 +198,4 @@ async function ping() {
   return { ok: true, text: text.trim().slice(0, 50), model: 'qwen2.5-7b-instruct-q4_k_m' };
 }
 
-module.exports = { summarise, compact, ping };
+module.exports = { summarise, compact, chat, ping };
