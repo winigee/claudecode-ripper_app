@@ -34,10 +34,13 @@ function applyServerStatus(s) {
   state.serverReady = !!(s && s.ready);
   state.modelInstalled = !!(s && s.modelInstalled);
 
+  // Only show the setup modal if a required file is actually missing.
+  // Once both pieces are on disk, never block the UI — even if the server
+  // itself failed to start, the user needs to reach Settings → Diagnostics.
   const needSetup = !state.modelInstalled || !(s && s.llamafileInstalled);
   if (needSetup) {
     $('#setup').hidden = false;
-    setStatus(!s.llamafileInstalled ? 'runtime not installed' : 'model not installed', 'warn');
+    setStatus(!(s && s.llamafileInstalled) ? 'runtime not installed' : 'model not installed', 'warn');
     return;
   }
   $('#setup').hidden = true;
@@ -61,14 +64,14 @@ $('#btn-download-model').addEventListener('click', async () => {
   $('#btn-cancel-download').hidden = false;
   $('#setup-progress').hidden = false;
   $('#setup-error').hidden = true;
-  setStatus('downloading model…', 'warn');
+  setStatus('downloading…', 'warn');
 
   const res = await window.bones.modelDownload();
   if (res && res.ok) {
+    // Hide the modal immediately. Server start runs in the background — its
+    // status will arrive via the onServerStatus event handler.
     $('#setup').hidden = true;
     setStatus('starting local model…', 'warn');
-    const status = await window.bones.serverStart();
-    applyServerStatus(status);
   } else if (res && res.cancelled) {
     $('#btn-download-model').hidden = false;
     $('#btn-cancel-download').hidden = true;

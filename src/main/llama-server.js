@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const net = require('net');
 const path = require('path');
@@ -13,9 +13,25 @@ let startError = null;
 let logTail = [];
 const LOG_TAIL_MAX = 300;
 
+function logFilePath() {
+  return path.join(app.getPath('userData'), 'llama-server.log');
+}
+
+let logStream = null;
+function openLogStream() {
+  try {
+    if (logStream) logStream.end();
+  } catch (_) {}
+  logStream = fs.createWriteStream(logFilePath(), { flags: 'a' });
+  logStream.write(`\n=== ${new Date().toISOString()} new start ===\n`);
+}
+
 function logLine(line) {
   logTail.push(line);
   if (logTail.length > LOG_TAIL_MAX) logTail.shift();
+  if (logStream) {
+    try { logStream.write(line + '\n'); } catch (_) {}
+  }
 }
 
 function llamafileBinary() {
@@ -78,11 +94,21 @@ async function start() {
     throw startError;
   }
 
-  // Llamafile needs +x. electron-builder usually preserves it from the source file,
-  // but be defensive — calling chmod on a packaged Resources file is allowed.
-  try {
-    fs.chmodSync(bin, 0o755);
-  } catch (_) {}
+  // Llamafile needs +x and must not be quarantined.
+  try { fs.chmodSync(bin, 0o755); } catch (_) {}
+  // Strip macOS quarantine attribute if present. Files downloaded via Node.js
+  // usually escape this, but defensive removal costs nothing.
+  if (process.platform === 'darwin') {
+    try {
+      execFileSync('/usr/bin/xattr', ['-d', 'com.apple.quarantine', bin], { stdio: 'ignore' });
+    } catch (_) {
+      // attribute may not be present — non-zero exit, ignore
+    }
+  }
+
+  openLogStream();
+  logLine(`==> bin: ${bin}`);
+  logLine(`==> model: ${model}`);
 
   port = await pickFreePort();
   const args = [
@@ -138,6 +164,7 @@ function status() {
     llamafileInstalled: config.llamafileInstalled() || !!llamafileBinary(),
     modelInstalled: config.modelInstalled(),
     modelPath: config.modelPath(),
+    logFilePath: logFilePath(),
     error: startError ? { message: startError.message, code: startError.code || null } : null,
   };
 }

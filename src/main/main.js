@@ -136,9 +136,16 @@ ipcMain.handle('model:download', async (event) => {
     try { event.sender.send('model:progress', p); } catch (_) {}
   };
   const res = await modelDownload.startDownload(send);
+  // Do NOT block on llamaServer.start() here. Kick it off in the background
+  // and return immediately so the renderer can dismiss the setup modal.
   if (res.ok) {
-    await llamaServer.start().catch(() => {});
-    event.sender.send('server:status', llamaServer.status());
+    setImmediate(async () => {
+      try { event.sender.send('server:status', llamaServer.status()); } catch (_) {}
+      try {
+        await llamaServer.start();
+      } catch (_) {}
+      try { event.sender.send('server:status', llamaServer.status()); } catch (_) {}
+    });
   }
   return res;
 });
