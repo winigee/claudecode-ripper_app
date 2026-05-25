@@ -1,6 +1,7 @@
 const { spawn, execFileSync } = require('child_process');
 const fs = require('fs');
 const net = require('net');
+const os = require('os');
 const path = require('path');
 const { app } = require('electron');
 
@@ -11,40 +12,34 @@ let port = null;
 let ready = false;
 let startError = null;
 let logTail = [];
-const LOG_TAIL_MAX = 300;
+const LOG_TAIL_MAX = 500;
 
 function logFilePath() {
   return path.join(app.getPath('userData'), 'llama-server.log');
 }
 
-let logStream = null;
-function openLogStream() {
+// Append-only log file. Don't keep a long-lived write stream — just open,
+// write, flush, close for every line. Robust against ordering across spawns.
+function diskLog(line) {
   try {
-    if (logStream) logStream.end();
+    fs.appendFileSync(logFilePath(), line + '\n');
   } catch (_) {}
-  logStream = fs.createWriteStream(logFilePath(), { flags: 'a' });
-  logStream.write(`\n=== ${new Date().toISOString()} new start ===\n`);
 }
 
 function logLine(line) {
-  logTail.push(line);
+  const stamped = `[${new Date().toISOString()}] ${line}`;
+  logTail.push(stamped);
   if (logTail.length > LOG_TAIL_MAX) logTail.shift();
-  if (logStream) {
-    try { logStream.write(line + '\n'); } catch (_) {}
-  }
+  diskLog(stamped);
 }
 
 function llamafileBinary() {
-  // Prefer the runtime-downloaded copy under Application Support if present.
   const runtimePath = config.llamafilePath();
   if (fs.existsSync(runtimePath)) return runtimePath;
-
-  // Fallback: bundled copy in the .app (used during development / if shipped this way)
   const bundled = app.isPackaged
     ? path.join(process.resourcesPath, 'llama-cpp', 'llamafile')
     : path.join(__dirname, '..', '..', 'vendor', 'llama-cpp', 'llamafile');
   if (fs.existsSync(bundled)) return bundled;
-
   return null;
 }
 
@@ -60,96 +55,149 @@ function pickFreePort() {
   });
 }
 
-async function waitForHealth(p, timeoutMs = 120_000) {
-  const deadline = Date.now() + timeoutMs;
+async function probeHealth(p, abortIfDead) {
+  const deadline = Date.now() + 180_000; // 3 min absolute ceiling
   while (Date.now() < deadline) {
+    if (abortIfDead && abortIfDead()) return false; // proc died — give up immediately
     try {
       const r = await fetch(`http://127.0.0.1:${p}/health`);
       if (r.ok) {
         const j = await r.json();
         if (j && j.status === 'ok') return true;
       }
-    } catch (_) {
-      // not up yet
-    }
+    } catch (_) {}
     await new Promise((r) => setTimeout(r, 500));
   }
   return false;
 }
 
-async function start() {
-  if (proc) return { port, ready };
-
-  const bin = llamafileBinary();
-  if (!bin) {
-    startError = new Error(
-      'llamafile binary not found. Expected at Resources/llama-cpp/llamafile (production) or vendor/llama-cpp/llamafile (dev).'
-    );
-    throw startError;
-  }
-  const model = config.modelPath();
-  if (!fs.existsSync(model)) {
-    startError = new Error(`Model file not found at ${model}.`);
-    startError.code = 'NO_MODEL';
-    throw startError;
-  }
-
-  // Llamafile needs +x and must not be quarantined.
-  try { fs.chmodSync(bin, 0o755); } catch (_) {}
-  // Strip macOS quarantine attribute if present. Files downloaded via Node.js
-  // usually escape this, but defensive removal costs nothing.
-  if (process.platform === 'darwin') {
-    try {
-      execFileSync('/usr/bin/xattr', ['-d', 'com.apple.quarantine', bin], { stdio: 'ignore' });
-    } catch (_) {
-      // attribute may not be present — non-zero exit, ignore
-    }
-  }
-
-  openLogStream();
-  logLine(`==> bin: ${bin}`);
-  logLine(`==> model: ${model}`);
-
-  port = await pickFreePort();
-  const args = [
+function buildArgs(model, p) {
+  return [
     '--server',
     '--host', '127.0.0.1',
-    '--port', String(port),
+    '--port', String(p),
     '--nobrowser',
     '-m', model,
     '-c', '8192',
     '--gpu', 'disable',
-    '-t', String(Math.max(4, Math.floor(require('os').cpus().length / 2))),
+    '-t', String(Math.max(2, Math.floor(os.cpus().length / 2))),
     '--log-disable',
   ];
+}
+
+function stripQuarantine(bin) {
+  if (process.platform !== 'darwin') return;
+  try {
+    execFileSync('/usr/bin/xattr', ['-d', 'com.apple.quarantine', bin], { stdio: 'ignore' });
+    logLine(`xattr: removed com.apple.quarantine from ${bin}`);
+  } catch (_) {
+    // attribute absent — fine
+  }
+}
+
+// Try direct spawn first, then shell-mediated spawn if that fails. Cosmopolitan
+// binaries should work directly on macOS via the embedded Mach-O, but some
+// kernel/AMFI configurations reject the MZ prefix and we fall back to letting
+// /bin/sh interpret the APE shell prefix at the top of the file.
+function trySpawn(bin, args, mode) {
+  logLine(`spawn attempt: mode=${mode}`);
+  let p;
+  if (mode === 'direct') {
+    p = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+  } else {
+    // Shell mode: invoke via bash since the APE prefix uses bash builtins.
+    const shellPath = fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh';
+    const quoted = [bin, ...args].map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
+    p = spawn(shellPath, ['-c', `exec ${quoted}`], { stdio: ['ignore', 'pipe', 'pipe'] });
+  }
+
+  p.stdout.on('data', (b) => b.toString().split('\n').forEach((l) => l && logLine(`[out] ${l}`)));
+  p.stderr.on('data', (b) => b.toString().split('\n').forEach((l) => l && logLine(`[err] ${l}`)));
+  p.on('error', (err) => logLine(`spawn error (${mode}): ${err.code || ''} ${err.message}`));
+  return p;
+}
+
+async function start() {
+  if (proc) {
+    logLine('start() called but proc already alive — returning existing');
+    return { port, ready };
+  }
 
   startError = null;
-  proc = spawn(bin, args, {
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
-
-  proc.stdout.on('data', (b) => b.toString().split('\n').forEach((l) => l && logLine(l)));
-  proc.stderr.on('data', (b) => b.toString().split('\n').forEach((l) => l && logLine(l)));
-  proc.on('exit', (code, signal) => {
-    logLine(`llamafile exited code=${code} signal=${signal}`);
-    proc = null;
-    ready = false;
-  });
-
-  ready = await waitForHealth(port);
-  if (!ready) {
-    startError = new Error('llamafile did not become healthy within 120s. Check Diagnostics log.');
-    stop();
+  const bin = llamafileBinary();
+  if (!bin) {
+    startError = new Error('llamafile binary not found.');
+    logLine('start failed: ' + startError.message);
     throw startError;
   }
-  return { port, ready };
+  const model = config.modelPath();
+  if (!fs.existsSync(model)) {
+    startError = new Error(`Model file not found at ${model}`);
+    startError.code = 'NO_MODEL';
+    logLine('start failed: ' + startError.message);
+    throw startError;
+  }
+
+  // Make sure the binary is executable and not quarantined.
+  let stat;
+  try {
+    stat = fs.statSync(bin);
+    logLine(`bin size=${stat.size} mode=0o${(stat.mode & 0o777).toString(8)}`);
+  } catch (e) {
+    logLine('stat failed: ' + e.message);
+  }
+  try {
+    fs.chmodSync(bin, 0o755);
+    logLine(`chmod 0755 ok`);
+  } catch (e) {
+    logLine('chmod failed: ' + e.message);
+  }
+  stripQuarantine(bin);
+
+  port = await pickFreePort();
+  const args = buildArgs(model, port);
+  logLine(`==> bin: ${bin}`);
+  logLine(`==> model: ${model}`);
+  logLine(`==> port: ${port}`);
+  logLine(`==> args: ${args.join(' ')}`);
+
+  for (const mode of ['direct', 'shell']) {
+    let exited = false;
+    let exitInfo = null;
+    proc = trySpawn(bin, args, mode);
+    proc.on('exit', (code, signal) => {
+      exited = true;
+      exitInfo = { code, signal };
+      logLine(`llamafile exited (${mode}) code=${code} signal=${signal}`);
+      proc = null;
+      ready = false;
+    });
+
+    ready = await probeHealth(port, () => exited);
+    if (ready) {
+      logLine(`server became healthy via ${mode}`);
+      return { port, ready };
+    }
+
+    // Server didn't come up. If proc died, try next mode. If proc is alive but
+    // /health never went green, kill it and bail — switching modes won't help.
+    if (!exited) {
+      logLine(`server hung (${mode}) — killing`);
+      try { proc.kill('SIGTERM'); } catch (_) {}
+      proc = null;
+      startError = new Error(`llamafile started but did not become healthy via ${mode}.`);
+      throw startError;
+    }
+    logLine(`spawn ${mode} died; will try next mode if any`);
+  }
+
+  startError = new Error('llamafile failed to start under any spawn mode. See llama-server.log.');
+  throw startError;
 }
 
 function stop() {
   if (proc) {
-    try {
-      proc.kill('SIGTERM');
-    } catch (_) {}
+    try { proc.kill('SIGTERM'); } catch (_) {}
     proc = null;
   }
   ready = false;
@@ -169,12 +217,7 @@ function status() {
   };
 }
 
-function getPort() {
-  return port;
-}
-
-function tail() {
-  return logTail.slice();
-}
+function getPort() { return port; }
+function tail() { return logTail.slice(); }
 
 module.exports = { start, stop, status, getPort, tail };

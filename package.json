@@ -1,7 +1,7 @@
 {
   "name": "bonesai",
   "productName": "BonesAI",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Local-first macOS desktop tool for document summarisation and research. Runs Qwen2.5-7B on-device via llamafile.",
   "main": "src/main/main.js",
   "scripts": {

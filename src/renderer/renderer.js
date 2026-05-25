@@ -31,19 +31,21 @@ function setStatus(text, kind) {
 }
 
 function applyServerStatus(s) {
-  state.serverReady = !!(s && s.ready);
-  state.modelInstalled = !!(s && s.modelInstalled);
+  if (!s) return;
+  state.serverReady = !!s.ready;
+  state.modelInstalled = !!s.modelInstalled;
 
-  // Only show the setup modal if a required file is actually missing.
-  // Once both pieces are on disk, never block the UI — even if the server
-  // itself failed to start, the user needs to reach Settings → Diagnostics.
-  const needSetup = !state.modelInstalled || !(s && s.llamafileInstalled);
-  if (needSetup) {
+  // The setup modal is only for downloads. If both files are on disk it must
+  // never appear, regardless of whether the server is happy. Errors surface
+  // in the top-right status bar and in Settings → Diagnostics.
+  const filesReady = s.modelInstalled && s.llamafileInstalled;
+  if (filesReady) {
+    $('#setup').hidden = true;
+  } else {
     $('#setup').hidden = false;
-    setStatus(!(s && s.llamafileInstalled) ? 'runtime not installed' : 'model not installed', 'warn');
+    setStatus(!s.llamafileInstalled ? 'runtime not installed' : 'model not installed', 'warn');
     return;
   }
-  $('#setup').hidden = true;
 
   if (s.error) {
     setStatus('server error · check Settings → Diagnostics', 'err');
@@ -52,7 +54,7 @@ function applyServerStatus(s) {
   } else if (s.running) {
     setStatus('starting local model…', 'warn');
   } else {
-    setStatus('local model offline', 'err');
+    setStatus('local model offline · click Settings → Restart', 'err');
   }
 }
 
