@@ -2,22 +2,50 @@
 <html>
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';"
+    />
     <title>BonesAI</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header>
-      <div class="brand">BonesAI</div>
+      <div class="brand">
+        <span class="brand-bone">BONE</span><span class="brand-ai">SAI</span>
+      </div>
       <nav>
         <button data-tab="work" class="tab active">Work</button>
         <button data-tab="brain" class="tab">Brain</button>
         <button data-tab="settings" class="tab">Settings</button>
       </nav>
-      <div class="status" id="status">checking…</div>
+      <div class="status" id="status">starting…</div>
     </header>
 
     <main>
+      <!-- Setup screen: shown only when model is missing -->
+      <section id="setup" class="setup-panel" hidden>
+        <div class="setup-card">
+          <h1>One-time setup</h1>
+          <p>
+            BonesAI runs an AI model locally on this Mac. Nothing leaves the machine.
+          </p>
+          <p class="muted">
+            Model: <strong>Qwen2.5-7B-Instruct (Q4_K_M)</strong> — about 4.7 GB.
+            Downloaded once from Hugging Face. Stored under Application Support.
+          </p>
+          <div id="setup-progress" hidden>
+            <div class="progress-bar"><div id="progress-fill"></div></div>
+            <div id="progress-text" class="muted">0%</div>
+          </div>
+          <div class="setup-actions">
+            <button id="btn-download-model" class="primary">Download model</button>
+            <button id="btn-cancel-download" hidden>Cancel</button>
+          </div>
+          <p id="setup-error" class="error" hidden></p>
+        </div>
+      </section>
+
       <!-- Work tab -->
       <section id="tab-work" class="tab-panel active">
         <div id="dropzone">
@@ -31,7 +59,10 @@
 
         <div id="files-summary"></div>
 
-        <textarea id="paste-area" placeholder="Or paste content here (overrides dropped files if non-empty)."></textarea>
+        <textarea
+          id="paste-area"
+          placeholder="Or paste content here (overrides dropped files if non-empty)."
+        ></textarea>
 
         <div class="row">
           <input
@@ -44,6 +75,7 @@
         <div class="actions">
           <button id="btn-summarise" class="primary">Summarise</button>
           <button id="btn-compact">Compact</button>
+          <button id="btn-cancel" hidden>Cancel</button>
           <button id="btn-save-brain" disabled>Save to Brain</button>
         </div>
 
@@ -62,37 +94,38 @@
       <!-- Settings tab -->
       <section id="tab-settings" class="tab-panel">
         <h2>Settings</h2>
+
         <div class="setting">
-          <label>Anthropic API key</label>
-          <input id="api-key" type="password" placeholder="sk-ant-…" autocomplete="off" />
-          <p class="hint" id="api-key-hint"></p>
+          <label>Local model</label>
+          <p class="hint" id="model-state">Checking…</p>
           <div class="row">
-            <button id="btn-save-key">Save</button>
-            <button id="btn-clear-key">Clear</button>
-            <button id="btn-test">Test connection</button>
+            <button id="btn-test">Test inference</button>
+            <button id="btn-server-restart">Restart server</button>
           </div>
         </div>
 
         <div class="setting">
-          <label>Model</label>
-          <select id="model">
-            <option value="claude-sonnet-4-6">Claude Sonnet 4.6 (recommended for summaries)</option>
-            <option value="claude-haiku-4-5">Claude Haiku 4.5 (faster, cheaper)</option>
-            <option value="claude-opus-4-7">Claude Opus 4.7 (highest quality)</option>
-          </select>
+          <label>About BonesAI v0.7.0</label>
+          <p class="hint">
+            <strong>Local-first.</strong> All summarising and compacting runs on this Mac via
+            <code>llama.cpp</code> + Qwen2.5-7B-Instruct. No network call is made during
+            ordinary use.
+          </p>
+          <p class="hint">
+            <strong>No Claude API in this version.</strong> Cloud calls are reintroduced in
+            v0.8.0, gated behind an anonymisation review step. Until then the API key field is
+            intentionally absent.
+          </p>
+          <p class="hint">
+            Configuration and Brain notes live under <code>~/Library/Application Support/BonesAI/</code>.
+            The model file is at <code>models/Qwen2.5-7B-Instruct-Q4_K_M.gguf</code>.
+          </p>
         </div>
 
         <div class="setting">
-          <label>About</label>
-          <p class="hint">
-            BonesAI is a personal desktop tool. It sends document content to the Anthropic Claude API,
-            which is a cloud service. Do not use it for confidential or privileged material unless your
-            API account terms have been assessed as adequate.
-          </p>
-          <p class="hint">
-            Configuration is stored under your Application Support directory. The API key is never
-            included in the application bundle.
-          </p>
+          <label>Diagnostics</label>
+          <pre id="diag-log" class="diag"></pre>
+          <button id="btn-refresh-log">Refresh log</button>
         </div>
       </section>
     </main>

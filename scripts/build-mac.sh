@@ -1,19 +1,15 @@
 #!/usr/bin/env bash
-# Build BonesAI for macOS 11 Big Sur (Intel x86_64).
+# Build BonesAI v0.7.0 for macOS 11 Big Sur (Intel x86_64).
 #
 # Run this on the target Mac. Prerequisites:
 #   - Node.js 18.x or 20.x installed (https://nodejs.org)
+#   - llama.cpp built somewhere on this Mac (see scripts/fetch-llama.sh)
 #   - Run once: npm install
 #
 # The script produces:
-#   dist/mac/BonesAI.app                    — the unpacked .app bundle
-#   dist/BonesAI-<version>-mac-x64.app.zip  — a drag-to-Applications zip built with ditto
-#
-# After unzipping on the Mac:
-#   1. Drag BonesAI.app into /Applications
-#   2. Clear the Gatekeeper quarantine attribute (unsigned app):
-#        xattr -cr /Applications/BonesAI.app
-#   3. Open the app. Paste your Anthropic API key into Settings on first run.
+#   dist/mac/BonesAI.app
+#   dist/BonesAI-<version>-mac-x64.app.zip
+#   dist/BonesAI-<version>-mac-x64.app.zip.sha256
 
 set -euo pipefail
 
@@ -29,29 +25,38 @@ if [[ ! -d node_modules ]]; then
   npm install
 fi
 
+if [[ ! -x "vendor/llama-cpp/llama-server" ]]; then
+  echo "==> Staging llama.cpp binaries"
+  ./scripts/fetch-llama.sh
+fi
+
+# Optional icon: drop a 1024x1024 PNG at build/icon.png or an .icns at build/icon.icns
+mkdir -p build
+if [[ -f "build/icon.png" || -f "build/icon.icns" ]]; then
+  echo "==> Using icon at build/icon.{png,icns}"
+else
+  echo "==> No icon found at build/icon.png — building with default Electron icon."
+fi
+
 VERSION=$(node -p "require('./package.json').version")
 
 echo "==> Building BonesAI v${VERSION} for macOS x86_64"
 npx electron-builder --mac --x64 --dir
 
-APP_PATH="dist/mac/BonesAI.app"
-if [[ ! -d "$APP_PATH" ]]; then
-  # electron-builder >= 24 uses dist/mac for x64
-  APP_PATH=$(find dist -name 'BonesAI.app' -type d -maxdepth 3 | head -n 1)
-fi
+APP_PATH=$(find dist -name 'BonesAI.app' -type d -maxdepth 3 | head -n 1)
 if [[ -z "$APP_PATH" || ! -d "$APP_PATH" ]]; then
   echo "Could not locate BonesAI.app under dist/. Build may have failed." >&2
   exit 1
 fi
 
-echo "==> Ad-hoc signing the .app so Gatekeeper can launch it"
+echo "==> Ad-hoc signing the .app"
 codesign --force --deep --sign - "$APP_PATH"
 
 ZIP_NAME="BonesAI-v${VERSION}-mac-x64.app.zip"
 ZIP_PATH="dist/${ZIP_NAME}"
 rm -f "$ZIP_PATH"
 
-echo "==> Packing $ZIP_NAME with ditto (preserves bundle structure)"
+echo "==> Packing $ZIP_NAME with ditto"
 ditto -c -k --sequesterRsrc --keepParent "$APP_PATH" "$ZIP_PATH"
 
 SHA=$(shasum -a 256 "$ZIP_PATH" | awk '{print $1}')

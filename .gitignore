@@ -6,3 +6,8 @@ out/
 .env
 .env.local
 config.local.json
+vendor/llama-cpp/*
+!vendor/llama-cpp/README.txt
+build/icon.png
+build/icon.icns
+build/icon.iconset/

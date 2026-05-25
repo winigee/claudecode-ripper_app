@@ -6,6 +6,9 @@ const state = {
   skipped: [],
   lastOutput: '',
   lastOutputKind: null,
+  currentRunId: null,
+  serverReady: false,
+  modelInstalled: false,
 };
 
 // --- Tabs ---
@@ -27,14 +30,66 @@ function setStatus(text, kind) {
   el.className = 'status' + (kind ? ' ' + kind : '');
 }
 
-async function refreshStatusFromSettings() {
-  const s = await window.bones.getSettings();
-  if (!s.hasApiKey) {
-    setStatus('no API key — open Settings', 'err');
+function applyServerStatus(s) {
+  state.serverReady = !!(s && s.ready);
+  state.modelInstalled = !!(s && s.modelInstalled);
+
+  if (!state.modelInstalled) {
+    $('#setup').hidden = false;
+    setStatus('model not installed', 'warn');
+    return;
+  }
+  $('#setup').hidden = true;
+
+  if (s.error) {
+    setStatus('server error · check Settings → Diagnostics', 'err');
+  } else if (state.serverReady) {
+    setStatus('local · ready · qwen2.5-7b', 'ok');
+  } else if (s.running) {
+    setStatus('starting local model…', 'warn');
   } else {
-    setStatus(`ready · ${s.model}`, 'ok');
+    setStatus('local model offline', 'err');
   }
 }
+
+window.bones.onServerStatus(applyServerStatus);
+
+// --- Setup screen / model download ---
+$('#btn-download-model').addEventListener('click', async () => {
+  $('#btn-download-model').hidden = true;
+  $('#btn-cancel-download').hidden = false;
+  $('#setup-progress').hidden = false;
+  $('#setup-error').hidden = true;
+  setStatus('downloading model…', 'warn');
+
+  const res = await window.bones.modelDownload();
+  if (res && res.ok) {
+    $('#setup').hidden = true;
+    setStatus('starting local model…', 'warn');
+    const status = await window.bones.serverStart();
+    applyServerStatus(status);
+  } else if (res && res.cancelled) {
+    $('#btn-download-model').hidden = false;
+    $('#btn-cancel-download').hidden = true;
+    $('#setup-progress').hidden = true;
+    setStatus('download cancelled', 'warn');
+  } else {
+    $('#btn-download-model').hidden = false;
+    $('#btn-cancel-download').hidden = true;
+    $('#setup-error').hidden = false;
+    $('#setup-error').textContent = 'Error: ' + (res && res.error ? res.error : 'unknown');
+    setStatus('download failed', 'err');
+  }
+});
+
+$('#btn-cancel-download').addEventListener('click', () => window.bones.modelCancel());
+
+window.bones.onModelProgress((p) => {
+  const pct = Math.round((p.pct || 0) * 100);
+  $('#progress-fill').style.width = pct + '%';
+  const mb = (n) => (n / 1024 / 1024).toFixed(0);
+  $('#progress-text').textContent = `${pct}% · ${mb(p.received)} / ${mb(p.total)} MB`;
+});
 
 // --- Drop zone ---
 const dropzone = $('#dropzone');
@@ -58,25 +113,16 @@ dropzone.addEventListener('drop', async (e) => {
   const dt = e.dataTransfer;
   if (!dt || !dt.files) return;
   const paths = [];
-  for (const f of dt.files) {
-    if (f.path) paths.push(f.path);
-  }
+  for (const f of dt.files) if (f.path) paths.push(f.path);
   if (paths.length === 0) return;
   await ingestPaths(paths);
 });
 
-// Block default drop everywhere else so the window doesn't navigate
 window.addEventListener('dragover', (e) => e.preventDefault());
 window.addEventListener('drop', (e) => e.preventDefault());
 
-$('#btn-pick-files').addEventListener('click', async () => {
-  const res = await window.bones.pickFiles();
-  applyIngest(res);
-});
-$('#btn-pick-folder').addEventListener('click', async () => {
-  const res = await window.bones.pickFolder();
-  applyIngest(res);
-});
+$('#btn-pick-files').addEventListener('click', async () => applyIngest(await window.bones.pickFiles()));
+$('#btn-pick-folder').addEventListener('click', async () => applyIngest(await window.bones.pickFolder()));
 $('#btn-clear-files').addEventListener('click', () => {
   state.files = [];
   state.skipped = [];
@@ -84,7 +130,7 @@ $('#btn-clear-files').addEventListener('click', () => {
 });
 
 async function ingestPaths(paths) {
-  setStatus('reading files…');
+  setStatus('reading files…', 'warn');
   const res = await window.bones.ingestPaths(paths);
   if (res && res.error) {
     setStatus('ingest error: ' + res.error.message, 'err');
@@ -98,7 +144,7 @@ function applyIngest(res) {
   state.files = (res.files || []).concat(state.files);
   state.skipped = (res.skipped || []).concat(state.skipped);
   renderFilesSummary();
-  refreshStatusFromSettings();
+  refreshStatus();
 }
 
 function renderFilesSummary() {
@@ -108,7 +154,7 @@ function renderFilesSummary() {
     return;
   }
   const totalChars = state.files.reduce((n, f) => n + (f.text ? f.text.length : 0), 0);
-  let html = `<div><strong>${state.files.length} file(s) loaded</strong> · ~${totalChars.toLocaleString()} chars</div>`;
+  let html = `<div><strong>${state.files.length} file(s)</strong> · ~${totalChars.toLocaleString()} chars</div>`;
   for (const f of state.files.slice(0, 20)) {
     html += `<div class="file">${escapeHtml(f.name || f.path)} <span class="muted">(${f.kind}, ${f.bytes} B)</span></div>`;
   }
@@ -123,57 +169,72 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
-// --- Summarise / Compact ---
+// --- Run + streaming ---
 $('#btn-summarise').addEventListener('click', () => run('summarise'));
 $('#btn-compact').addEventListener('click', () => run('compact'));
+$('#btn-cancel').addEventListener('click', () => {
+  if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+});
+
+window.bones.onToken(({ runId, delta }) => {
+  if (runId !== state.currentRunId) return;
+  $('#output').textContent += delta;
+  $('#output').scrollTop = $('#output').scrollHeight;
+});
 
 async function run(kind) {
+  if (!state.serverReady) {
+    setStatus('local model not ready', 'err');
+    return;
+  }
   const instructions = $('#instructions').value;
   const pasted = $('#paste-area').value.trim();
   let payload;
   if (kind === 'summarise') {
-    if (pasted) {
-      payload = { files: [{ name: 'pasted-content.txt', text: pasted }], instructions };
-    } else if (state.files.length > 0) {
-      payload = { files: state.files, instructions };
-    } else {
-      setStatus('drop files or paste text first', 'err');
-      return;
-    }
+    if (pasted) payload = { files: [{ name: 'pasted-content.txt', text: pasted }], instructions };
+    else if (state.files.length > 0) payload = { files: state.files, instructions };
+    else { setStatus('drop files or paste text first', 'err'); return; }
   } else {
     const content = pasted || state.files.map((f) => f.text).join('\n\n');
-    if (!content) {
-      setStatus('drop files or paste text first', 'err');
-      return;
-    }
+    if (!content) { setStatus('drop files or paste text first', 'err'); return; }
     payload = { content, instructions };
   }
 
-  setStatus('thinking…');
+  const runId = 'r-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  state.currentRunId = runId;
+
+  const startedAt = Date.now();
+  setStatus(`${kind} · thinking locally…`, 'warn');
   $('#output').textContent = '';
+  $('#output').classList.add('streaming');
   $('#btn-summarise').disabled = true;
   $('#btn-compact').disabled = true;
+  $('#btn-cancel').hidden = false;
+  $('#btn-save-brain').disabled = true;
 
   try {
     const fn = kind === 'summarise' ? window.bones.summarise : window.bones.compact;
-    const res = await fn(payload);
+    const res = await fn(payload, runId);
     if (res && res.error) {
-      $('#output').textContent = 'Error: ' + res.error.message;
+      $('#output').textContent = ($('#output').textContent || '') + '\n\n[Error: ' + res.error.message + ']';
       setStatus('error', 'err');
     } else {
-      $('#output').textContent = res.text;
-      state.lastOutput = res.text;
+      state.lastOutput = $('#output').textContent;
       state.lastOutputKind = kind;
       $('#btn-save-brain').disabled = false;
-      const usage = res.usage ? ` · ${res.usage.input_tokens}→${res.usage.output_tokens} tok` : '';
-      setStatus(`${kind} done · ${res.model}${usage}`, 'ok');
+      const secs = ((Date.now() - startedAt) / 1000).toFixed(1);
+      const trunc = res.truncated ? ' · input truncated' : '';
+      setStatus(`${kind} done · ${secs}s${trunc}`, 'ok');
     }
   } catch (err) {
-    $('#output').textContent = 'Error: ' + err.message;
+    $('#output').textContent += '\n\n[Error: ' + err.message + ']';
     setStatus('error', 'err');
   } finally {
+    state.currentRunId = null;
+    $('#output').classList.remove('streaming');
     $('#btn-summarise').disabled = false;
     $('#btn-compact').disabled = false;
+    $('#btn-cancel').hidden = true;
   }
 }
 
@@ -182,7 +243,9 @@ $('#btn-save-brain').addEventListener('click', async () => {
   if (!state.lastOutput) return;
   const firstFile = state.files[0];
   const note = {
-    title: firstFile ? `${state.lastOutputKind}: ${firstFile.name}` : `${state.lastOutputKind} ${new Date().toLocaleString()}`,
+    title: firstFile
+      ? `${state.lastOutputKind}: ${firstFile.name}`
+      : `${state.lastOutputKind} ${new Date().toLocaleString()}`,
     body: state.lastOutput,
     source: state.files.map((f) => f.name || f.path),
   };
@@ -222,49 +285,40 @@ async function refreshBrain() {
 
 // --- Settings ---
 async function refreshSettings() {
-  const s = await window.bones.getSettings();
-  $('#api-key').value = '';
-  $('#api-key').placeholder = s.hasApiKey ? '••• saved •••' : 'sk-ant-…';
-  $('#model').value = s.model;
-  const hint = $('#api-key-hint');
-  if (s.apiKeyFromEnv) {
-    hint.textContent = 'Currently using ANTHROPIC_API_KEY from the environment.';
-  } else if (s.hasApiKey) {
-    hint.textContent = 'Key stored locally in BonesAI config (chmod 600). Not in the app bundle.';
-  } else {
-    hint.textContent = 'No key set. Paste your Anthropic API key and click Save.';
-  }
+  const s = await window.bones.serverStatus();
+  const state = [];
+  state.push(s.modelInstalled ? 'Model file present.' : 'Model file missing — open the setup screen.');
+  state.push(s.binary ? `llama-server binary: ${s.binary}` : 'llama-server binary not found in vendor/ or Resources/.');
+  state.push(s.ready ? `Server ready on 127.0.0.1:${s.port}.` : 'Server not running.');
+  if (s.error) state.push('Last error: ' + s.error.message);
+  $('#model-state').innerHTML = state.map((l) => escapeHtml(l)).join('<br>');
+  refreshLog();
 }
 
-$('#btn-save-key').addEventListener('click', async () => {
-  const key = $('#api-key').value.trim();
-  if (!key) return;
-  await window.bones.setApiKey(key);
-  $('#api-key').value = '';
-  await refreshSettings();
-  await refreshStatusFromSettings();
-});
+async function refreshLog() {
+  const lines = await window.bones.serverLogTail();
+  $('#diag-log').textContent = (lines || []).join('\n') || '(no log yet)';
+}
 
-$('#btn-clear-key').addEventListener('click', async () => {
-  await window.bones.setApiKey(null);
-  await refreshSettings();
-  await refreshStatusFromSettings();
-});
-
-$('#model').addEventListener('change', async () => {
-  await window.bones.setModel($('#model').value);
-  await refreshStatusFromSettings();
-});
+$('#btn-refresh-log').addEventListener('click', refreshLog);
 
 $('#btn-test').addEventListener('click', async () => {
-  setStatus('pinging Claude…');
+  setStatus('pinging local model…', 'warn');
   const res = await window.bones.ping();
-  if (res && res.error) {
-    setStatus('ping failed: ' + res.error.message, 'err');
-  } else {
-    setStatus(`ping ok · ${res.model} · "${(res.text || '').trim()}"`, 'ok');
-  }
+  if (res && res.error) setStatus('ping failed: ' + res.error.message, 'err');
+  else setStatus(`ping ok · "${(res.text || '').trim()}"`, 'ok');
 });
 
-// --- Init ---
-refreshStatusFromSettings();
+$('#btn-server-restart').addEventListener('click', async () => {
+  setStatus('restarting…', 'warn');
+  const st = await window.bones.serverStart();
+  applyServerStatus(st);
+});
+
+// --- Status refresher ---
+async function refreshStatus() {
+  const s = await window.bones.serverStatus();
+  applyServerStatus(s);
+}
+
+refreshStatus();

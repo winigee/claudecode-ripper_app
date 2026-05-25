@@ -1,15 +1,21 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('bones', {
-  // Settings
-  getSettings: () => ipcRenderer.invoke('settings:get'),
-  setApiKey: (key) => ipcRenderer.invoke('settings:set-api-key', key),
-  setModel: (model) => ipcRenderer.invoke('settings:set-model', model),
+  // Server / model lifecycle
+  serverStatus: () => ipcRenderer.invoke('server:status'),
+  serverStart: () => ipcRenderer.invoke('server:start'),
+  serverLogTail: () => ipcRenderer.invoke('server:log-tail'),
+  onServerStatus: (cb) => ipcRenderer.on('server:status', (_e, s) => cb(s)),
+  modelDownload: () => ipcRenderer.invoke('model:download'),
+  modelCancel: () => ipcRenderer.invoke('model:cancel'),
+  onModelProgress: (cb) => ipcRenderer.on('model:progress', (_e, p) => cb(p)),
 
-  // Claude
-  ping: () => ipcRenderer.invoke('claude:ping'),
-  summarise: (payload) => ipcRenderer.invoke('claude:summarise', payload),
-  compact: (payload) => ipcRenderer.invoke('claude:compact', payload),
+  // Inference
+  ping: () => ipcRenderer.invoke('llama:ping'),
+  summarise: (payload, runId) => ipcRenderer.invoke('llama:summarise', payload, runId),
+  compact: (payload, runId) => ipcRenderer.invoke('llama:compact', payload, runId),
+  cancelRun: (runId) => ipcRenderer.invoke('llama:cancel', runId),
+  onToken: (cb) => ipcRenderer.on('llama:token', (_e, msg) => cb(msg)),
 
   // Ingest
   ingestPaths: (paths) => ipcRenderer.invoke('ingest:paths', paths),

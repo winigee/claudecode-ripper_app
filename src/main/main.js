@@ -2,11 +2,14 @@ const { app, BrowserWindow, ipcMain, dialog, shell, Menu } = require('electron')
 const path = require('path');
 
 const config = require('./config');
-const claude = require('./claude');
+const llamaServer = require('./llama-server');
+const llama = require('./llama');
+const modelDownload = require('./model-download');
 const ingest = require('./ingest');
 const brain = require('./brain');
 
 let mainWindow = null;
+const activeRuns = new Map();
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -53,46 +56,47 @@ function buildMenu() {
           },
         ]
       : []),
-    {
-      label: 'File',
-      submenu: [isMac ? { role: 'close' } : { role: 'quit' }],
-    },
+    { label: 'File', submenu: [isMac ? { role: 'close' } : { role: 'quit' }] },
     {
       label: 'Edit',
       submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
+        { role: 'undo' }, { role: 'redo' },
         { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
+        { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' },
       ],
     },
     {
       label: 'View',
       submenu: [
-        { role: 'reload' },
-        { role: 'toggleDevTools' },
+        { role: 'reload' }, { role: 'toggleDevTools' },
         { type: 'separator' },
-        { role: 'resetZoom' },
-        { role: 'zoomIn' },
-        { role: 'zoomOut' },
+        { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
         { type: 'separator' },
         { role: 'togglefullscreen' },
       ],
     },
-    {
-      label: 'Window',
-      submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'close' }],
-    },
+    { label: 'Window', submenu: [{ role: 'minimize' }, { role: 'zoom' }, { role: 'close' }] },
   ];
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
 }
 
-app.whenReady().then(() => {
+async function tryAutoStartServer() {
+  if (!config.modelInstalled()) return;
+  try {
+    await llamaServer.start();
+    if (mainWindow) mainWindow.webContents.send('server:status', llamaServer.status());
+  } catch (err) {
+    if (mainWindow) mainWindow.webContents.send('server:status', llamaServer.status());
+  }
+}
+
+app.whenReady().then(async () => {
   buildMenu();
   createWindow();
+
+  mainWindow.webContents.once('did-finish-load', () => {
+    tryAutoStartServer();
+  });
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -103,52 +107,92 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-// --- IPC handlers ---
+app.on('before-quit', () => {
+  llamaServer.stop();
+});
+
+// --- IPC ---
 
 function errorPayload(err) {
   return { error: { message: err.message, code: err.code || null } };
 }
 
-ipcMain.handle('settings:get', () => {
-  return {
-    hasApiKey: !!config.getApiKey(),
-    apiKeyFromEnv: !!process.env.ANTHROPIC_API_KEY,
-    model: config.getModel(),
+ipcMain.handle('server:status', () => llamaServer.status());
+
+ipcMain.handle('server:start', async () => {
+  try {
+    await llamaServer.start();
+    return llamaServer.status();
+  } catch (err) {
+    return { ...llamaServer.status(), error: { message: err.message, code: err.code || null } };
+  }
+});
+
+ipcMain.handle('server:log-tail', () => llamaServer.tail());
+
+ipcMain.handle('model:download', async (event) => {
+  const send = (p) => {
+    try { event.sender.send('model:progress', p); } catch (_) {}
   };
+  const res = await modelDownload.startDownload(send);
+  if (res.ok) {
+    await llamaServer.start().catch(() => {});
+    event.sender.send('server:status', llamaServer.status());
+  }
+  return res;
 });
 
-ipcMain.handle('settings:set-api-key', (_e, key) => {
-  config.setApiKey(key || null);
-  return { ok: true };
-});
+ipcMain.handle('model:cancel', () => modelDownload.cancelDownload());
 
-ipcMain.handle('settings:set-model', (_e, model) => {
-  config.setModel(model);
-  return { ok: true };
-});
-
-ipcMain.handle('claude:ping', async () => {
+ipcMain.handle('llama:ping', async () => {
   try {
-    return await claude.ping();
+    return await llama.ping();
   } catch (err) {
     return errorPayload(err);
   }
 });
 
-ipcMain.handle('claude:summarise', async (_e, payload) => {
+ipcMain.handle('llama:summarise', async (event, payload, runId) => {
+  const ctrl = new AbortController();
+  activeRuns.set(runId, ctrl);
   try {
-    return await claude.summarise(payload);
+    const onToken = (t) => {
+      try { event.sender.send('llama:token', { runId, delta: t }); } catch (_) {}
+    };
+    const res = await llama.summarise(payload, { onToken, signal: ctrl.signal });
+    return res;
   } catch (err) {
+    if (err.name === 'AbortError') return { error: { message: 'Cancelled', code: 'CANCELLED' } };
     return errorPayload(err);
+  } finally {
+    activeRuns.delete(runId);
   }
 });
 
-ipcMain.handle('claude:compact', async (_e, payload) => {
+ipcMain.handle('llama:compact', async (event, payload, runId) => {
+  const ctrl = new AbortController();
+  activeRuns.set(runId, ctrl);
   try {
-    return await claude.compact(payload);
+    const onToken = (t) => {
+      try { event.sender.send('llama:token', { runId, delta: t }); } catch (_) {}
+    };
+    const res = await llama.compact(payload, { onToken, signal: ctrl.signal });
+    return res;
   } catch (err) {
+    if (err.name === 'AbortError') return { error: { message: 'Cancelled', code: 'CANCELLED' } };
     return errorPayload(err);
+  } finally {
+    activeRuns.delete(runId);
   }
+});
+
+ipcMain.handle('llama:cancel', (_e, runId) => {
+  const ctrl = activeRuns.get(runId);
+  if (ctrl) {
+    ctrl.abort();
+    return { ok: true };
+  }
+  return { ok: false };
 });
 
 ipcMain.handle('ingest:paths', async (_e, paths) => {

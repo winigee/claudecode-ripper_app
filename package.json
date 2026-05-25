@@ -1,20 +1,18 @@
 {
   "name": "bonesai",
   "productName": "BonesAI",
-  "version": "0.6.0",
-  "description": "Personal desktop tool that wraps the Claude API for document summarisation and research.",
+  "version": "0.7.0",
+  "description": "Local-first macOS desktop tool for document summarisation and research. Runs Qwen2.5-7B on-device via llama.cpp.",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --mac --x64 --dir",
-    "dist": "electron-builder --mac --x64",
-    "dist:universal": "electron-builder --mac --universal"
+    "dist": "electron-builder --mac --x64"
   },
   "author": "Winston Green",
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.65.0",
     "mammoth": "^1.8.0",
     "pdf-parse": "^1.1.1"
   },
@@ -36,6 +34,13 @@
       "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
       "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
       "!**/*.map"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/llama-cpp",
+        "to": "llama-cpp",
+        "filter": ["**/*"]
+      }
     ],
     "mac": {
       "category": "public.app-category.productivity",
