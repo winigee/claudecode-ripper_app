@@ -95,26 +95,23 @@ function stripQuarantine(bin) {
   }
 }
 
-// Try direct spawn first, then shell-mediated spawn if that fails. Cosmopolitan
-// binaries should work directly on macOS via the embedded Mach-O, but some
-// kernel/AMFI configurations reject the MZ prefix and we fall back to letting
-// /bin/sh interpret the APE shell prefix at the top of the file.
-function trySpawn(bin, args, mode) {
-  logLine(`spawn attempt: mode=${mode}`);
-  let p;
-  if (mode === 'direct') {
-    p = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
-  } else {
-    // Shell mode: invoke via bash since the APE prefix uses bash builtins.
-    const shellPath = fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh';
-    const quoted = [bin, ...args].map((a) => `'${a.replace(/'/g, "'\\''")}'`).join(' ');
-    p = spawn(shellPath, ['-c', `exec ${quoted}`], { stdio: ['ignore', 'pipe', 'pipe'] });
-  }
+// Always invoke via bash. Cosmopolitan binaries start with an MZ (DOS) header
+// followed by an APE shell prefix; bash reads the prefix, identifies the OS,
+// and exec's the embedded Mach-O. Direct spawn() from Node sometimes fails
+// silently on macOS — the kernel can't recognise the format and Node loses
+// both the error and exit events. Bash invocation works on every macOS we
+// have, confirmed by the user's terminal test.
+function shellQuote(s) {
+  return `'${String(s).replace(/'/g, "'\\''")}'`;
+}
 
-  p.stdout.on('data', (b) => b.toString().split('\n').forEach((l) => l && logLine(`[out] ${l}`)));
-  p.stderr.on('data', (b) => b.toString().split('\n').forEach((l) => l && logLine(`[err] ${l}`)));
-  p.on('error', (err) => logLine(`spawn error (${mode}): ${err.code || ''} ${err.message}`));
-  return p;
+function spawnLlamafile(bin, args) {
+  const shellPath = fs.existsSync('/bin/bash') ? '/bin/bash' : '/bin/sh';
+  const cmd = [bin, ...args].map(shellQuote).join(' ');
+  logLine(`spawn via ${shellPath} -c: ${cmd}`);
+  return spawn(shellPath, ['-c', `exec ${cmd} 2>&1`], {
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 }
 
 async function start() {
@@ -139,9 +136,8 @@ async function start() {
   }
 
   // Make sure the binary is executable and not quarantined.
-  let stat;
   try {
-    stat = fs.statSync(bin);
+    const stat = fs.statSync(bin);
     logLine(`bin size=${stat.size} mode=0o${(stat.mode & 0o777).toString(8)}`);
   } catch (e) {
     logLine('stat failed: ' + e.message);
@@ -159,39 +155,53 @@ async function start() {
   logLine(`==> bin: ${bin}`);
   logLine(`==> model: ${model}`);
   logLine(`==> port: ${port}`);
-  logLine(`==> args: ${args.join(' ')}`);
 
-  for (const mode of ['direct', 'shell']) {
-    let exited = false;
-    let exitInfo = null;
-    proc = trySpawn(bin, args, mode);
-    proc.on('exit', (code, signal) => {
-      exited = true;
-      exitInfo = { code, signal };
-      logLine(`llamafile exited (${mode}) code=${code} signal=${signal}`);
-      proc = null;
-      ready = false;
-    });
+  let exited = false;
+  let exitInfo = null;
 
-    ready = await probeHealth(port, () => exited);
-    if (ready) {
-      logLine(`server became healthy via ${mode}`);
-      return { port, ready };
-    }
-
-    // Server didn't come up. If proc died, try next mode. If proc is alive but
-    // /health never went green, kill it and bail — switching modes won't help.
-    if (!exited) {
-      logLine(`server hung (${mode}) — killing`);
-      try { proc.kill('SIGTERM'); } catch (_) {}
-      proc = null;
-      startError = new Error(`llamafile started but did not become healthy via ${mode}.`);
-      throw startError;
-    }
-    logLine(`spawn ${mode} died; will try next mode if any`);
+  try {
+    proc = spawnLlamafile(bin, args);
+  } catch (e) {
+    logLine(`spawn threw synchronously: ${e.message}`);
+    startError = new Error(`spawn threw: ${e.message}`);
+    throw startError;
   }
 
-  startError = new Error('llamafile failed to start under any spawn mode. See llama-server.log.');
+  logLine(`spawn returned pid=${proc.pid || 'null'}`);
+
+  proc.on('error', (err) => {
+    logLine(`spawn error event: ${err.code || ''} ${err.message}`);
+  });
+  proc.on('spawn', () => {
+    logLine(`spawn event fired (process truly started)`);
+  });
+  proc.on('exit', (code, signal) => {
+    exited = true;
+    exitInfo = { code, signal };
+    logLine(`process exited code=${code} signal=${signal}`);
+    proc = null;
+    ready = false;
+  });
+  proc.stdout.on('data', (b) => b.toString().split('\n').forEach((l) => l && logLine(`[out] ${l}`)));
+  proc.stderr.on('data', (b) => b.toString().split('\n').forEach((l) => l && logLine(`[err] ${l}`)));
+
+  // Give the spawn event a tick to fire.
+  await new Promise((r) => setTimeout(r, 100));
+
+  ready = await probeHealth(port, () => exited);
+  if (ready) {
+    logLine(`server is healthy on port ${port}`);
+    return { port, ready };
+  }
+
+  if (exited) {
+    startError = new Error(`llamafile died before /health responded (code=${exitInfo?.code}, signal=${exitInfo?.signal}).`);
+  } else {
+    logLine(`server never went healthy — killing`);
+    try { proc.kill('SIGTERM'); } catch (_) {}
+    proc = null;
+    startError = new Error('llamafile started but /health never responded within 3 min.');
+  }
   throw startError;
 }
 
