@@ -32,8 +32,18 @@ $$('.tab').forEach((btn) => {
     $('#tab-' + btn.dataset.tab).classList.add('active');
     if (btn.dataset.tab === 'brain') refreshBrain();
     if (btn.dataset.tab === 'settings') refreshSettings();
+    // Close sidebar on mobile after tab change
+    document.querySelector('.sidebar')?.classList.remove('open');
   });
 });
+
+// ----- Mobile sidebar toggle -----
+const sidebarToggleBtn = document.getElementById('sidebar-toggle');
+if (sidebarToggleBtn) {
+  sidebarToggleBtn.addEventListener('click', () => {
+    document.querySelector('.sidebar')?.classList.toggle('open');
+  });
+}
 
 // ----- Status -----
 function setStatus(text, kind) {
@@ -461,6 +471,61 @@ async function refreshSettings() {
   $('#model-state').innerHTML = lines.join('<br>');
   refreshLog();
   refreshModelList();
+  refreshSharing();
+}
+
+async function refreshSharing() {
+  if (!window.bones.webInfo) return;
+  // In the browser-served renderer, webInfo isn't available — hide the section.
+  const sec = $('#setting-sharing');
+  let info;
+  try { info = await window.bones.webInfo(); } catch (_) { info = { error: 'host only' }; }
+  if (info && info.error) {
+    if (sec) sec.style.display = 'none';
+    return;
+  }
+  if (sec) sec.style.display = '';
+  $('#web-enabled').checked = !!info.enabled;
+  $('#web-share').value = info.share || 'localhost';
+  const urls = $('#web-urls');
+  if (!info.running) {
+    urls.innerHTML = '<span class="muted">Server stopped.</span>';
+  } else if (!info.urls || info.urls.length === 0) {
+    urls.innerHTML = '<span class="muted">Listening, no URLs to show.</span>';
+  } else {
+    urls.innerHTML = info.urls.map((u) => `<div class="url-row"><span class="label">${escapeHtml(u.label)}</span>${escapeHtml(u.url)}</div>`).join('');
+  }
+}
+
+if (document.getElementById('web-enabled')) {
+  $('#web-enabled').addEventListener('change', async (e) => {
+    if (e.target.checked) await window.bones.webStart();
+    else await window.bones.webStop();
+    refreshSharing();
+  });
+  $('#web-share').addEventListener('change', async (e) => {
+    await window.bones.webSetShare(e.target.value);
+    refreshSharing();
+  });
+  $('#btn-regen-token').addEventListener('click', async () => {
+    if (!confirm('Regenerate the access token? All existing URLs will stop working.')) return;
+    await window.bones.webRegenToken();
+    // Restart if running so the new token actually takes effect on the wire
+    const info = await window.bones.webInfo();
+    if (info.running) {
+      await window.bones.webStop();
+      await window.bones.webStart();
+    }
+    refreshSharing();
+  });
+  $('#btn-copy-url').addEventListener('click', async () => {
+    const info = await window.bones.webInfo();
+    const u = (info.urls || []).find((x) => x.label !== 'localhost') || (info.urls || [])[0];
+    if (u && u.url) {
+      try { await navigator.clipboard.writeText(u.url); setStatus('URL copied', 'ok'); }
+      catch (_) { setStatus('clipboard failed', 'err'); }
+    }
+  });
 }
 
 async function refreshModelList() {

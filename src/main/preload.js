@@ -39,4 +39,11 @@ contextBridge.exposeInMainWorld('bones', {
   chatDelete: (id) => ipcRenderer.invoke('chat:delete', id),
   chatRename: (id, title) => ipcRenderer.invoke('chat:rename', { id, title }),
   chatStream: (payload, runId) => ipcRenderer.invoke('llama:chat', payload, runId),
+
+  // Network sharing
+  webInfo: () => ipcRenderer.invoke('web:info'),
+  webStart: () => ipcRenderer.invoke('web:start'),
+  webStop: () => ipcRenderer.invoke('web:stop'),
+  webSetShare: (share) => ipcRenderer.invoke('web:set-share', share),
+  webRegenToken: () => ipcRenderer.invoke('web:regen-token'),
 });

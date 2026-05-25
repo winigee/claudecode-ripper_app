@@ -9,6 +9,7 @@ const modelDownload = require('./model-download');
 const ingest = require('./ingest');
 const brain = require('./brain');
 const chats = require('./chats');
+const webServer = require('./web-server');
 
 let mainWindow = null;
 const activeRuns = new Map();
@@ -110,8 +111,17 @@ app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', async () => {
   llamaServer.stop();
+  try { await webServer.stop(); } catch (_) {}
+});
+
+// Auto-start web server on app launch if previously enabled.
+app.whenReady().then(async () => {
+  const cfg = webServer.getWebConfig();
+  if (cfg.enabled) {
+    try { await webServer.start(); } catch (_) {}
+  }
 });
 
 // --- IPC ---
@@ -262,6 +272,26 @@ ipcMain.handle('ingest:pick-folder', async () => {
   if (result.canceled) return { files: [], skipped: [] };
   return ingest.ingestPaths(result.filePaths);
 });
+
+// --- Web server / network sharing ---
+ipcMain.handle('web:info', () => webServer.info());
+ipcMain.handle('web:start', async () => {
+  try { return await webServer.start(); }
+  catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('web:stop', async () => {
+  try { return await webServer.stop(); }
+  catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('web:set-share', async (_e, share) => {
+  webServer.updateWebConfig({ share });
+  if (webServer.info().running) {
+    try { return await webServer.restart(); }
+    catch (e) { return { error: e.message }; }
+  }
+  return webServer.info();
+});
+ipcMain.handle('web:regen-token', () => webServer.regenerateToken());
 
 ipcMain.handle('brain:list', () => brain.listNotes());
 ipcMain.handle('brain:add', (_e, note) => brain.addNote(note || {}));

@@ -32,6 +32,8 @@
       <div class="status" id="status">starting…</div>
     </aside>
 
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
+
     <main>
       <!-- Setup screen: shown only when a required file is missing -->
       <section id="setup" class="setup-panel" hidden>
@@ -123,6 +125,29 @@
           </div>
         </div>
 
+        <div class="setting" id="setting-sharing">
+          <label>Network sharing</label>
+          <p class="hint">Lets you open BonesAI in a browser on another device (other Mac, iPhone). The host Mac must be on and awake.</p>
+          <div class="row">
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;text-transform:none;letter-spacing:0;color:var(--text)">
+              <input type="checkbox" id="web-enabled" /> Enable web server
+            </label>
+          </div>
+          <div class="row" id="web-share-row">
+            <label style="font-size:11px;color:var(--accent);letter-spacing:1px">SCOPE</label>
+            <select id="web-share">
+              <option value="localhost">Localhost only (this Mac)</option>
+              <option value="lan">Local network (Wi-Fi / Tailscale)</option>
+            </select>
+          </div>
+          <div id="web-urls" class="web-urls"></div>
+          <div class="row">
+            <button id="btn-regen-token">Regenerate token</button>
+            <button id="btn-copy-url">Copy URL</button>
+          </div>
+          <p class="hint">Tip: install Tailscale on this Mac and your iPhone (free, https://tailscale.com), then use the Tailscale URL above to access BonesAI from anywhere over the encrypted mesh.</p>
+        </div>
+
         <div class="setting">
           <label>Available models</label>
           <p class="hint" id="hw-summary">Detecting hardware…</p>
@@ -130,14 +155,14 @@
         </div>
 
         <div class="setting">
-          <label>About BonesAI v2.1.2</label>
+          <label>About BonesAI v2.2.0</label>
           <p class="hint">
-            <strong>Local-first.</strong> All inference runs on this Mac via llamafile + Qwen2.5-7B-Instruct.
+            <strong>Local-first.</strong> All inference runs on this Mac via llamafile + a local model.
             No network call is made during ordinary use.
           </p>
           <p class="hint">
-            v2.1.1 adds the Chat tab and a left-sidebar layout. Internet access for the model
-            arrives in v2.1.2 as an opt-in feature.
+            v2.2.0 adds Network sharing — open BonesAI in a browser on other devices on the same
+            Wi-Fi, or over Tailscale for access from anywhere. Token-protected.
           </p>
           <p class="hint">
             Configuration, Brain notes, and chat history live under <code>~/Library/Application Support/BonesAI/</code>.
@@ -180,6 +205,16 @@
       </defs>
     </svg>
 
+    <!-- HTTP transport: loaded only when running in a browser (no Electron
+         preload). Defines window.bones if it isn't already there. -->
+    <script>
+      if (!window.bones) {
+        const s = document.createElement('script');
+        s.src = 'bones-http.js';
+        s.defer = false;
+        document.currentScript.parentNode.insertBefore(s, document.currentScript);
+      }
+    </script>
     <script src="renderer.js"></script>
   </body>
 </html>
