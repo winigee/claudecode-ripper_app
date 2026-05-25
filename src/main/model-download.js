@@ -31,72 +31,92 @@ function followRedirects(url, maxRedirects = 5) {
   });
 }
 
+async function downloadOne({ url, dest, expectedMinBytes, onProgress, label }) {
+  const tmp = dest + '.part';
+  await fsp.mkdir(path.dirname(dest), { recursive: true });
+
+  let received = 0;
+  let total = expectedMinBytes;
+  let lastEmit = 0;
+
+  const res = await followRedirects(url);
+  if (res.headers['content-length']) {
+    total = parseInt(res.headers['content-length'], 10) || total;
+  }
+
+  const out = fs.createWriteStream(tmp);
+  await new Promise((resolve, reject) => {
+    res.on('data', (chunk) => {
+      if (activeDownload && activeDownload.cancelled) {
+        res.destroy(new Error('cancelled'));
+        out.destroy();
+        return;
+      }
+      received += chunk.length;
+      out.write(chunk);
+      const now = Date.now();
+      if (now - lastEmit > 400) {
+        lastEmit = now;
+        if (onProgress) onProgress({ label, received, total, pct: total ? received / total : 0 });
+      }
+    });
+    res.on('end', () => out.end(resolve));
+    res.on('error', reject);
+    out.on('error', reject);
+  });
+
+  if (activeDownload && activeDownload.cancelled) {
+    await fsp.unlink(tmp).catch(() => {});
+    return { cancelled: true };
+  }
+
+  if (received < expectedMinBytes * 0.95) {
+    await fsp.unlink(tmp).catch(() => {});
+    return { error: `Download truncated: ${received} of ~${expectedMinBytes} bytes.` };
+  }
+
+  await fsp.rename(tmp, dest);
+  if (onProgress) onProgress({ label, received, total: received, pct: 1 });
+  return { ok: true, bytes: received, path: dest };
+}
+
 async function startDownload(onProgress) {
   if (activeDownload) {
     return { error: 'A download is already in progress.' };
   }
-
-  const dest = config.modelPath();
-  const tmp = dest + '.part';
-  const url = config.DEFAULT_MODEL_URL;
-  const expectedBytes = config.DEFAULT_MODEL_BYTES;
-
-  await fsp.mkdir(path.dirname(dest), { recursive: true });
-
   activeDownload = { cancelled: false };
 
-  let received = 0;
-  let total = expectedBytes;
-  let lastEmit = 0;
-
   try {
-    const res = await followRedirects(url);
-    if (res.headers['content-length']) {
-      total = parseInt(res.headers['content-length'], 10) || total;
-    }
-
-    const out = fs.createWriteStream(tmp);
-
-    await new Promise((resolve, reject) => {
-      res.on('data', (chunk) => {
-        if (activeDownload && activeDownload.cancelled) {
-          res.destroy(new Error('cancelled'));
-          out.destroy();
-          return;
-        }
-        received += chunk.length;
-        out.write(chunk);
-        const now = Date.now();
-        if (now - lastEmit > 500) {
-          lastEmit = now;
-          if (onProgress) onProgress({ received, total, pct: total ? received / total : 0 });
-        }
+    // 1) Download llamafile if not already installed (~42 MB).
+    if (!config.llamafileInstalled()) {
+      const res = await downloadOne({
+        url: config.LLAMAFILE_URL,
+        dest: config.llamafilePath(),
+        expectedMinBytes: 30_000_000,
+        onProgress,
+        label: 'runtime',
       });
-      res.on('end', () => {
-        out.end(resolve);
+      if (res.cancelled) { activeDownload = null; return { cancelled: true }; }
+      if (res.error) { activeDownload = null; return { error: 'Runtime download failed: ' + res.error }; }
+      try { fs.chmodSync(config.llamafilePath(), 0o755); } catch (_) {}
+    }
+
+    // 2) Download the GGUF model (~4.7 GB).
+    if (!config.modelInstalled()) {
+      const res = await downloadOne({
+        url: config.DEFAULT_MODEL_URL,
+        dest: config.modelPath(),
+        expectedMinBytes: config.DEFAULT_MODEL_BYTES,
+        onProgress,
+        label: 'model',
       });
-      res.on('error', reject);
-      out.on('error', reject);
-    });
-
-    if (activeDownload && activeDownload.cancelled) {
-      await fsp.unlink(tmp).catch(() => {});
-      activeDownload = null;
-      return { cancelled: true };
+      if (res.cancelled) { activeDownload = null; return { cancelled: true }; }
+      if (res.error) { activeDownload = null; return { error: 'Model download failed: ' + res.error }; }
     }
 
-    if (received < expectedBytes * 0.95) {
-      await fsp.unlink(tmp).catch(() => {});
-      activeDownload = null;
-      return { error: `Download truncated: ${received} of ~${expectedBytes} bytes.` };
-    }
-
-    await fsp.rename(tmp, dest);
-    if (onProgress) onProgress({ received, total: received, pct: 1 });
     activeDownload = null;
-    return { ok: true, bytes: received, path: dest };
+    return { ok: true };
   } catch (err) {
-    await fsp.unlink(tmp).catch(() => {});
     activeDownload = null;
     return { error: err.message };
   }

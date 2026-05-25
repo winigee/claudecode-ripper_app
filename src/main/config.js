@@ -49,13 +49,41 @@ function modelInstalled() {
   }
 }
 
+const LLAMAFILE_VERSION = '0.10.1';
+const LLAMAFILE_URL = `https://github.com/mozilla-ai/llamafile/releases/download/${LLAMAFILE_VERSION}/llamafile-${LLAMAFILE_VERSION}-thin`;
+const LLAMAFILE_MIN_BYTES = 30_000_000;
+
+function runtimeDir() {
+  const p = path.join(app.getPath('userData'), 'runtime');
+  fs.mkdirSync(p, { recursive: true });
+  return p;
+}
+
+function llamafilePath() {
+  return path.join(runtimeDir(), 'llamafile');
+}
+
+function llamafileInstalled() {
+  try {
+    const st = fs.statSync(llamafilePath());
+    return st.size > LLAMAFILE_MIN_BYTES;
+  } catch (_) {
+    return false;
+  }
+}
+
 module.exports = {
   readConfig,
   writeConfig,
   modelsDir,
   modelPath,
   modelInstalled,
+  runtimeDir,
+  llamafilePath,
+  llamafileInstalled,
   DEFAULT_MODEL_FILENAME,
   DEFAULT_MODEL_URL,
   DEFAULT_MODEL_BYTES,
+  LLAMAFILE_VERSION,
+  LLAMAFILE_URL,
 };

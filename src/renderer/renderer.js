@@ -34,9 +34,10 @@ function applyServerStatus(s) {
   state.serverReady = !!(s && s.ready);
   state.modelInstalled = !!(s && s.modelInstalled);
 
-  if (!state.modelInstalled) {
+  const needSetup = !state.modelInstalled || !(s && s.llamafileInstalled);
+  if (needSetup) {
     $('#setup').hidden = false;
-    setStatus('model not installed', 'warn');
+    setStatus(!s.llamafileInstalled ? 'runtime not installed' : 'model not installed', 'warn');
     return;
   }
   $('#setup').hidden = true;
@@ -88,7 +89,8 @@ window.bones.onModelProgress((p) => {
   const pct = Math.round((p.pct || 0) * 100);
   $('#progress-fill').style.width = pct + '%';
   const mb = (n) => (n / 1024 / 1024).toFixed(0);
-  $('#progress-text').textContent = `${pct}% · ${mb(p.received)} / ${mb(p.total)} MB`;
+  const stage = p.label === 'runtime' ? 'runtime' : 'model';
+  $('#progress-text').textContent = `${stage}: ${pct}% · ${mb(p.received)} / ${mb(p.total)} MB`;
 });
 
 // --- Drop zone ---

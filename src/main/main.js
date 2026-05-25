@@ -82,6 +82,7 @@ function buildMenu() {
 
 async function tryAutoStartServer() {
   if (!config.modelInstalled()) return;
+  if (!config.llamafileInstalled() && !llamaServer.status().binary) return;
   try {
     await llamaServer.start();
     if (mainWindow) mainWindow.webContents.send('server:status', llamaServer.status());

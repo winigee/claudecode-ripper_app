@@ -19,15 +19,16 @@ function logLine(line) {
 }
 
 function llamafileBinary() {
-  const candidates = [];
-  if (app.isPackaged) {
-    candidates.push(path.join(process.resourcesPath, 'llama-cpp', 'llamafile'));
-  } else {
-    candidates.push(path.join(__dirname, '..', '..', 'vendor', 'llama-cpp', 'llamafile'));
-  }
-  for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
-  }
+  // Prefer the runtime-downloaded copy under Application Support if present.
+  const runtimePath = config.llamafilePath();
+  if (fs.existsSync(runtimePath)) return runtimePath;
+
+  // Fallback: bundled copy in the .app (used during development / if shipped this way)
+  const bundled = app.isPackaged
+    ? path.join(process.resourcesPath, 'llama-cpp', 'llamafile')
+    : path.join(__dirname, '..', '..', 'vendor', 'llama-cpp', 'llamafile');
+  if (fs.existsSync(bundled)) return bundled;
+
   return null;
 }
 
@@ -134,6 +135,7 @@ function status() {
     ready,
     port,
     binary: llamafileBinary(),
+    llamafileInstalled: config.llamafileInstalled() || !!llamafileBinary(),
     modelInstalled: config.modelInstalled(),
     modelPath: config.modelPath(),
     error: startError ? { message: startError.message, code: startError.code || null } : null,
