@@ -2,7 +2,7 @@
 
 A local-first macOS desktop tool for document summarisation and research.
 
-All inference runs on the Mac via `llama.cpp` + Qwen2.5-7B-Instruct. Nothing leaves the machine during ordinary use. Cloud calls to the Claude API are not present in this version — they will return in v0.8.0, gated behind an explicit per-request anonymisation review step.
+All inference runs on the Mac via [llamafile](https://github.com/mozilla-ai/llamafile) (Mozilla's portable, single-binary build of llama.cpp) + Qwen2.5-7B-Instruct. Nothing leaves the machine during ordinary use. Cloud calls to the Claude API are not present in this version — they will return in v0.8.0, gated behind an explicit per-request anonymisation review step.
 
 ## Target environment
 
@@ -12,25 +12,14 @@ All inference runs on the Mac via `llama.cpp` + Qwen2.5-7B-Instruct. Nothing lea
 ## Stack
 
 - Electron 28.3.3 (Chromium 120, Node 18.18). Pinned for macOS 10.15+ support.
-- `llama.cpp` (your existing local build), spawned as a child process by the main process. Listens on `127.0.0.1` only, on a randomly chosen port.
+- llamafile (Mozilla, Cosmopolitan-libc-built single binary), bundled into the `.app` at `Contents/Resources/llama-cpp/llamafile`. Spawned in `--server` mode as a child process, listening on `127.0.0.1` only.
 - Qwen2.5-7B-Instruct Q4_K_M GGUF (~4.7 GB). Downloaded on first run from Hugging Face (bartowski's repackaging) into `~/Library/Application Support/BonesAI/models/`. Not bundled in the `.app`.
 - `pdf-parse` + `mammoth` for PDF and DOCX text extraction. No native modules.
 - Brain notes persist as JSON under Application Support.
 
 ## Build on the Mac
 
-You need llama.cpp built somewhere this Mac can find — `~/llama.cpp/build/bin/llama-server` is the default search path (`fetch-llama.sh` also checks `../llama.cpp/`, `$LLAMA_CPP_DIR`, and a Homebrew install).
-
-If you haven't built llama.cpp yet:
-
-```sh
-cd ~/llama.cpp     # or wherever you have the source
-mkdir -p build && cd build
-cmake ..
-cmake --build . --config Release -j
-```
-
-Then build BonesAI:
+No local llama.cpp compile is needed. `scripts/fetch-llama.sh` downloads the llamafile single binary from Mozilla's GitHub Releases (~42 MB) into `vendor/llama-cpp/llamafile`.
 
 ```sh
 cd ~/wherever/claudecode-ripper_app
@@ -40,7 +29,7 @@ npm install
 
 The build script:
 1. Runs `npm install` if needed
-2. Calls `scripts/fetch-llama.sh` to copy `llama-server` and its dylibs into `vendor/llama-cpp/`
+2. Calls `scripts/fetch-llama.sh` if `vendor/llama-cpp/llamafile` isn't already present
 3. Runs `electron-builder --mac --x64`, which embeds `vendor/llama-cpp/` into the `.app` at `Contents/Resources/llama-cpp/`
 4. Ad-hoc codesigns the `.app`
 5. Packages with `ditto` (preserves bundle symlinks correctly)

@@ -288,7 +288,7 @@ async function refreshSettings() {
   const s = await window.bones.serverStatus();
   const state = [];
   state.push(s.modelInstalled ? 'Model file present.' : 'Model file missing — open the setup screen.');
-  state.push(s.binary ? `llama-server binary: ${s.binary}` : 'llama-server binary not found in vendor/ or Resources/.');
+  state.push(s.binary ? `llamafile binary: ${s.binary}` : 'llamafile binary not found in vendor/ or Resources/.');
   state.push(s.ready ? `Server ready on 127.0.0.1:${s.port}.` : 'Server not running.');
   if (s.error) state.push('Last error: ' + s.error.message);
   $('#model-state').innerHTML = state.map((l) => escapeHtml(l)).join('<br>');

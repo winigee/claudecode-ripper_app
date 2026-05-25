@@ -11,19 +11,19 @@ let port = null;
 let ready = false;
 let startError = null;
 let logTail = [];
-const LOG_TAIL_MAX = 200;
+const LOG_TAIL_MAX = 300;
 
 function logLine(line) {
   logTail.push(line);
   if (logTail.length > LOG_TAIL_MAX) logTail.shift();
 }
 
-function llamaServerBinary() {
+function llamafileBinary() {
   const candidates = [];
   if (app.isPackaged) {
-    candidates.push(path.join(process.resourcesPath, 'llama-cpp', 'llama-server'));
+    candidates.push(path.join(process.resourcesPath, 'llama-cpp', 'llamafile'));
   } else {
-    candidates.push(path.join(__dirname, '..', '..', 'vendor', 'llama-cpp', 'llama-server'));
+    candidates.push(path.join(__dirname, '..', '..', 'vendor', 'llama-cpp', 'llamafile'));
   }
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;
@@ -43,16 +43,14 @@ function pickFreePort() {
   });
 }
 
-async function waitForHealth(p, timeoutMs = 90_000) {
+async function waitForHealth(p, timeoutMs = 120_000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
       const r = await fetch(`http://127.0.0.1:${p}/health`);
       if (r.ok) {
         const j = await r.json();
-        if (j && (j.status === 'ok' || j.status === 'loading model — please wait' || j.status === 'no slot available')) {
-          if (j.status === 'ok') return true;
-        }
+        if (j && j.status === 'ok') return true;
       }
     } catch (_) {
       // not up yet
@@ -65,49 +63,55 @@ async function waitForHealth(p, timeoutMs = 90_000) {
 async function start() {
   if (proc) return { port, ready };
 
-  const bin = llamaServerBinary();
+  const bin = llamafileBinary();
   if (!bin) {
     startError = new Error(
-      'llama-server binary not found. Place it at vendor/llama-cpp/llama-server (dev) or Resources/llama-cpp/llama-server (production).'
+      'llamafile binary not found. Expected at Resources/llama-cpp/llamafile (production) or vendor/llama-cpp/llamafile (dev).'
     );
     throw startError;
   }
   const model = config.modelPath();
   if (!fs.existsSync(model)) {
-    startError = new Error(`Model file not found at ${model}. Download it first via the setup screen.`);
+    startError = new Error(`Model file not found at ${model}.`);
     startError.code = 'NO_MODEL';
     throw startError;
   }
 
-  const libDir = path.dirname(bin);
+  // Llamafile needs +x. electron-builder usually preserves it from the source file,
+  // but be defensive — calling chmod on a packaged Resources file is allowed.
+  try {
+    fs.chmodSync(bin, 0o755);
+  } catch (_) {}
+
   port = await pickFreePort();
   const args = [
+    '--server',
     '--host', '127.0.0.1',
     '--port', String(port),
-    '--model', model,
-    '--ctx-size', '8192',
-    '--n-gpu-layers', '0',
-    '--threads', String(Math.max(4, Math.floor(require('os').cpus().length / 2))),
-    '--no-warmup',
+    '--nobrowser',
+    '-m', model,
+    '-c', '8192',
+    '--gpu', 'disable',
+    '-t', String(Math.max(4, Math.floor(require('os').cpus().length / 2))),
+    '--log-disable',
   ];
 
+  startError = null;
   proc = spawn(bin, args, {
-    cwd: libDir,
-    env: { ...process.env, DYLD_LIBRARY_PATH: libDir },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
 
   proc.stdout.on('data', (b) => b.toString().split('\n').forEach((l) => l && logLine(l)));
   proc.stderr.on('data', (b) => b.toString().split('\n').forEach((l) => l && logLine(l)));
   proc.on('exit', (code, signal) => {
-    logLine(`llama-server exited code=${code} signal=${signal}`);
+    logLine(`llamafile exited code=${code} signal=${signal}`);
     proc = null;
     ready = false;
   });
 
   ready = await waitForHealth(port);
   if (!ready) {
-    startError = new Error('llama-server did not become healthy within 90s. See log.');
+    startError = new Error('llamafile did not become healthy within 120s. Check Diagnostics log.');
     stop();
     throw startError;
   }
@@ -129,7 +133,7 @@ function status() {
     running: !!proc,
     ready,
     port,
-    binary: llamaServerBinary(),
+    binary: llamafileBinary(),
     modelInstalled: config.modelInstalled(),
     modelPath: config.modelPath(),
     error: startError ? { message: startError.message, code: startError.code || null } : null,
