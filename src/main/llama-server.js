@@ -72,16 +72,17 @@ async function probeHealth(p, abortIfDead) {
 }
 
 function buildArgs(model, p) {
+  // Keep this list conservative — llamafile's argument parser is stricter than
+  // upstream llama-server's. Flags removed in v0.7.4 because llamafile 0.10.1
+  // rejected them: --nobrowser, --log-disable.
   return [
     '--server',
     '--host', '127.0.0.1',
     '--port', String(p),
-    '--nobrowser',
     '-m', model,
     '-c', '8192',
     '--gpu', 'disable',
     '-t', String(Math.max(2, Math.floor(os.cpus().length / 2))),
-    '--log-disable',
   ];
 }
 

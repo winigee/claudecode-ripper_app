@@ -19,6 +19,12 @@
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; height: 100%; }
+
+/* HTML `hidden` attribute must win over any display: flex/grid/block on the
+   same element. Without this, .setup-panel's `display: flex` overrode hidden
+   and the setup modal stayed visible even when JS set $('#setup').hidden = true.
+   This was the root cause of "the modal keeps coming back" in v0.7.0–v0.7.3. */
+[hidden] { display: none !important; }
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
   background: radial-gradient(circle at 20% 0%, #0e1d36 0%, var(--bg) 60%);
