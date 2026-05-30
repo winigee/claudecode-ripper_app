@@ -108,20 +108,20 @@
           <div id="search-results" class="search-results"></div>
         </div>
 
-        <!-- Clean & send to Claude (the cannon) -->
+        <!-- Redact & send to Claude (the cannon) -->
         <div class="cannon">
-          <h3>Clean &amp; send to Claude</h3>
-          <p class="hint">Strip names, companies, and addresses from the loaded material, review the de-identified version, then fire it at Claude via the API with a prompt of your choice. Nothing leaves the Mac until you press Send.</p>
+          <h3>Redact &amp; send to Claude</h3>
+          <p class="hint">Strip names, companies, and addresses from the loaded material, review the redacted version, then fire it at Claude via the API with a prompt of your choice. Nothing leaves the Mac until you press Send. When the reply comes back, Bones puts the real names back automatically.</p>
           <div class="row">
-            <button id="btn-clean" class="primary">CLEAN</button>
+            <button id="btn-redact" class="primary">REDACT</button>
             <label class="search-opt">
-              <input type="checkbox" id="clean-model" checked />
+              <input type="checkbox" id="redact-model" checked />
               Also use the local model to catch plain names (slower, stays private)
             </label>
           </div>
-          <div id="clean-progress" class="search-progress muted" hidden></div>
-          <div id="clean-summary" class="clean-summary"></div>
-          <textarea id="clean-output" class="clean-output" placeholder="Cleaned material appears here. Review and edit before sending." hidden></textarea>
+          <div id="redact-progress" class="search-progress muted" hidden></div>
+          <div id="redact-summary" class="redact-summary"></div>
+          <textarea id="redact-output" class="redact-output" placeholder="Redacted material appears here. Review and edit before sending." hidden></textarea>
 
           <div id="cannon-send" hidden>
             <div class="cannon-promptbar">
@@ -139,7 +139,11 @@
             </div>
             <p id="cannon-nokey" class="hint" hidden>No API key set. Add one in <strong>Settings → Claude API</strong> to use the cannon.</p>
             <pre id="cannon-output" class="cannon-output"></pre>
-            <button id="btn-cannon-save-brain" disabled>Save response to Brain</button>
+            <div class="row cannon-after">
+              <button id="btn-toggle-reidentify" hidden>Show de-identified version</button>
+              <button id="btn-cannon-save-brain" disabled>Save response to Brain</button>
+              <span id="reident-note" class="muted" hidden></span>
+            </div>
           </div>
         </div>
 
@@ -182,7 +186,7 @@
 
         <div class="setting" id="setting-api">
           <label>Claude API (cannon)</label>
-          <p class="hint">Used only by “Send to Claude” in the Work tab. Your cleaned, de-identified material and prompt are sent to Anthropic’s API. The key is stored locally on this Mac (config.json, owner-only) and never logged.</p>
+          <p class="hint">Used only by “Send to Claude” in the Work tab. Your redacted material and prompt are sent to Anthropic’s API. The key is stored locally on this Mac (config.json, owner-only) and never logged.</p>
           <div class="row">
             <input id="api-key" type="password" placeholder="sk-ant-…" autocomplete="off" />
             <button id="btn-save-key">Save key</button>
@@ -228,16 +232,16 @@
         </div>
 
         <div class="setting">
-          <label>About BonesAI v2.4.0</label>
+          <label>About BonesAI v2.4.1</label>
           <p class="hint">
-            <strong>Local-first.</strong> Inference, search, and cleaning all run on this Mac via
+            <strong>Local-first.</strong> Inference, search, and redaction all run on this Mac via
             llamafile + a local model. The one exception is “Send to Claude”, which reaches the
-            Anthropic API on purpose — and only ever with material you have cleaned first.
+            Anthropic API on purpose — and only ever with material you have redacted first.
           </p>
           <p class="hint">
-            v2.4.0 adds CLEAN &amp; the cannon — strip names, companies, and addresses from your
-            material, review it, then fire the de-identified version at Claude with a prompt from
-            the library (or your own). v2.3.0 added Find documents (semantic search in Work).
+            v2.4.1 adds re-identification: BonesAI remembers every redacted name in memory for the
+            session and puts the real names back into Claude’s reply automatically. Toggle between
+            the redacted and re-identified views with one click. The map never touches disk.
           </p>
           <p class="hint">
             v2.2.0 added Network sharing — open BonesAI in a browser on other devices on the same

@@ -681,16 +681,16 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   font-size: 14px;
   color: var(--accent);
 }
-#btn-clean {
+#btn-redact {
   letter-spacing: 1px;
   font-weight: 700;
 }
-.clean-summary {
+.redact-summary {
   margin: 8px 0;
   font-size: 12.5px;
   color: var(--text-dim);
 }
-.clean-output {
+.redact-output {
   width: 100%;
   min-height: 120px;
   max-height: 260px;
@@ -698,6 +698,12 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   font-size: 12px;
   line-height: 1.5;
   margin: 6px 0 12px;
+}
+.cannon-after {
+  margin-top: 8px;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 #cannon-send {
   border-top: 1px dashed var(--border);

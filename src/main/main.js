@@ -264,13 +264,13 @@ ipcMain.handle('docsearch:run', async (event, payload, runId) => {
   }
 });
 
-// --- CLEAN (redaction) ---
-ipcMain.handle('clean:run', async (event, payload, runId) => {
+// --- REDACT ---
+ipcMain.handle('redact:run', async (event, payload, runId) => {
   const ctrl = new AbortController();
   activeRuns.set(runId, ctrl);
   try {
     const onProgress = (p) => {
-      try { event.sender.send('clean:progress', { runId, ...p }); } catch (_) {}
+      try { event.sender.send('redact:progress', { runId, ...p }); } catch (_) {}
     };
     return await redact.clean(payload.text || '', { useModel: payload.useModel !== false }, { onProgress, signal: ctrl.signal });
   } catch (err) {

@@ -31,9 +31,9 @@ contextBridge.exposeInMainWorld('bones', {
   docSearch: (payload, runId) => ipcRenderer.invoke('docsearch:run', payload, runId),
   onDocSearchProgress: (cb) => ipcRenderer.on('docsearch:progress', (_e, p) => cb(p)),
 
-  // CLEAN (redaction)
-  clean: (payload, runId) => ipcRenderer.invoke('clean:run', payload, runId),
-  onCleanProgress: (cb) => ipcRenderer.on('clean:progress', (_e, p) => cb(p)),
+  // REDACT
+  redact: (payload, runId) => ipcRenderer.invoke('redact:run', payload, runId),
+  onRedactProgress: (cb) => ipcRenderer.on('redact:progress', (_e, p) => cb(p)),
 
   // Prompt library
   promptList: () => ipcRenderer.invoke('prompts:list'),

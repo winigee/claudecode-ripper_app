@@ -17,9 +17,13 @@ const state = {
   // Token routing for non-chat streams
   tokenSink: null, // 'cannon' | null
   // Cannon
-  cleanedText: '',
+  redactedText: '',
+  redactMap: {},         // { '[PERSON_1]': 'Jane Doe', ... } — local only, never persisted
   prompts: [],
   selectedPrompt: null,
+  cannonResponseRaw: '',     // what Claude actually returned (with placeholders)
+  cannonResponseFilled: '',  // same with placeholders swapped back for real names
+  cannonShowFilled: true,    // current view in the output box
   lastCannonResponse: '',
 };
 
@@ -551,20 +555,20 @@ $('#search-query').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
 });
 
-// ===== CLEAN & CANNON =====
+// ===== REDACT & CANNON =====
 
-const CLEAN_LABELS = {
+const REDACT_LABELS = {
   model: 'Scanning for names with the local model…',
   redacting: 'Redacting…',
   done: '',
 };
 
-if (window.bones.onCleanProgress) {
-  window.bones.onCleanProgress((p) => {
+if (window.bones.onRedactProgress) {
+  window.bones.onRedactProgress((p) => {
     if (p.runId !== state.currentRunId) return;
-    const el = $('#clean-progress');
+    const el = $('#redact-progress');
     if (!el) return;
-    let msg = CLEAN_LABELS[p.stage] || '';
+    let msg = REDACT_LABELS[p.stage] || '';
     if (p.stage === 'model' && p.chunk) msg = `Scanning for names with the local model… (part ${p.chunk}/${p.of})`;
     if (!msg) { el.hidden = true; return; }
     el.hidden = false;
@@ -572,68 +576,81 @@ if (window.bones.onCleanProgress) {
   });
 }
 
-function materialForClean() {
+function materialForRedact() {
   const pasted = $('#paste-area').value.trim();
   if (pasted) return pasted;
   if (state.files.length > 0) return state.files.map((f) => `--- ${f.name || f.path} ---\n${f.text}`).join('\n\n');
   return '';
 }
 
-function renderCleanSummary(res) {
-  const el = $('#clean-summary');
+function renderRedactSummary(res) {
+  const el = $('#redact-summary');
   const counts = res.counts || {};
   const labelMap = { PERSON: 'people', COMPANY: 'companies', ADDRESS: 'addresses', EMAIL: 'emails', PHONE: 'phone numbers', POSTCODE: 'postcodes' };
   const parts = Object.keys(counts).map((k) => `${counts[k]} ${labelMap[k] || k.toLowerCase()}`);
   if (parts.length === 0) {
     el.innerHTML = '<span class="muted">Nothing matched to redact. Review the text before sending anyway.</span>';
   } else {
-    el.innerHTML = `<strong>${res.total}</strong> item(s) replaced: ${escapeHtml(parts.join(', '))}.`
+    el.innerHTML = `<strong>${res.total}</strong> item(s) redacted: ${escapeHtml(parts.join(', '))}. <span class="muted">Real names are remembered locally and put back into Claude's reply.</span>`
       + (res.truncated ? ' <span class="muted">(name scan covered the first part of very long material)</span>' : '');
   }
 }
 
-$('#btn-clean').addEventListener('click', async () => {
-  const material = materialForClean();
+$('#btn-redact').addEventListener('click', async () => {
+  const material = materialForRedact();
   if (!material) {
-    $('#clean-summary').innerHTML = '<span class="muted">Drop or paste some material first.</span>';
+    $('#redact-summary').innerHTML = '<span class="muted">Drop or paste some material first.</span>';
     return;
   }
-  const useModel = $('#clean-model').checked;
+  const useModel = $('#redact-model').checked;
   if (useModel && !state.serverReady) {
-    $('#clean-summary').innerHTML = '<span class="muted">Local model not ready — cleaning with patterns only.</span>';
+    $('#redact-summary').innerHTML = '<span class="muted">Local model not ready — redacting with patterns only.</span>';
   }
-  const runId = 'cl-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  const runId = 'rd-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   state.currentRunId = runId;
-  $('#btn-clean').disabled = true;
-  setStatus('cleaning…', 'warn');
+  $('#btn-redact').disabled = true;
+  setStatus('redacting…', 'warn');
   try {
-    const res = await window.bones.clean({ text: material, useModel: useModel && state.serverReady }, runId);
+    const res = await window.bones.redact({ text: material, useModel: useModel && state.serverReady }, runId);
     if (res && res.error) {
-      $('#clean-summary').innerHTML = `<span class="muted">Error: ${escapeHtml(res.error.message)}</span>`;
-      setStatus('clean error', 'err');
+      $('#redact-summary').innerHTML = `<span class="muted">Error: ${escapeHtml(res.error.message)}</span>`;
+      setStatus('redact error', 'err');
       return;
     }
-    state.cleanedText = res.text || '';
-    renderCleanSummary(res);
-    const out = $('#clean-output');
+    state.redactedText = res.text || '';
+    // Remember every placeholder→original mapping so we can put real names
+    // back into Claude's response. Lives only in this app session — wiped on
+    // reload/quit, never written to disk.
+    state.redactMap = {};
+    for (const r of (res.replacements || [])) {
+      state.redactMap[r.placeholder] = r.original;
+    }
+    renderRedactSummary(res);
+    const out = $('#redact-output');
     out.hidden = false;
-    out.value = state.cleanedText;
+    out.value = state.redactedText;
     $('#cannon-send').hidden = false;
+    // Reset any previous response panel when re-redacting.
+    state.cannonResponseRaw = '';
+    state.cannonResponseFilled = '';
+    $('#cannon-output').textContent = '';
+    $('#btn-toggle-reidentify').hidden = true;
+    $('#reident-note').hidden = true;
     await loadPromptLibrary();
     await refreshCannonKeyLabel();
-    setStatus('cleaned · review before sending', 'ok');
+    setStatus('redacted · review before sending', 'ok');
   } catch (err) {
-    $('#clean-summary').innerHTML = `<span class="muted">Error: ${escapeHtml(err.message)}</span>`;
-    setStatus('clean error', 'err');
+    $('#redact-summary').innerHTML = `<span class="muted">Error: ${escapeHtml(err.message)}</span>`;
+    setStatus('redact error', 'err');
   } finally {
     state.currentRunId = null;
-    $('#btn-clean').disabled = false;
-    $('#clean-progress').hidden = true;
+    $('#btn-redact').disabled = false;
+    $('#redact-progress').hidden = true;
   }
 });
 
-// Keep edits to the cleaned text as the source of truth for sending.
-$('#clean-output').addEventListener('input', (e) => { state.cleanedText = e.target.value; });
+// Keep edits to the redacted text as the source of truth for sending.
+$('#redact-output').addEventListener('input', (e) => { state.redactedText = e.target.value; });
 
 // ----- Prompt library -----
 
@@ -754,13 +771,51 @@ async function refreshCannonKeyLabel() {
   }
 }
 
+// Swap [TYPE_N] placeholders back to the real names from state.redactMap.
+// Only known placeholders are touched, so anything Claude invented stays
+// intact. Returns the count of distinct entities re-identified.
+function reidentify(text) {
+  let count = 0;
+  const seen = new Set();
+  const out = text.replace(/\[([A-Z]+_\d+)\]/g, (full, _key) => {
+    const real = state.redactMap[full];
+    if (real == null) return full;
+    if (!seen.has(full)) { seen.add(full); count++; }
+    return real;
+  });
+  return { text: out, count };
+}
+
+function setCannonView() {
+  const co = $('#cannon-output');
+  const btn = $('#btn-toggle-reidentify');
+  const note = $('#reident-note');
+  if (state.cannonShowFilled) {
+    co.textContent = state.cannonResponseFilled;
+    btn.textContent = 'Show redacted version';
+    const n = Object.keys(state.redactMap).length;
+    note.textContent = n ? `Re-identified using the local map (${n} entities).` : '';
+    note.hidden = !n;
+  } else {
+    co.textContent = state.cannonResponseRaw;
+    btn.textContent = 'Show re-identified version';
+    note.textContent = 'Showing exactly what Claude returned.';
+    note.hidden = false;
+  }
+}
+
+$('#btn-toggle-reidentify').addEventListener('click', () => {
+  state.cannonShowFilled = !state.cannonShowFilled;
+  setCannonView();
+});
+
 $('#btn-cannon').addEventListener('click', async () => {
   if (state.currentRunId) return;
   const promptText = $('#prompt-body').value.trim();
   if (!promptText) { setStatus('add a prompt to send', 'err'); return; }
   const unfilled = promptText.match(/\{\{[^}]+\}\}/g);
   if (unfilled && !confirm(`This prompt still has unfilled blanks (${unfilled.join(', ')}). Send anyway?`)) return;
-  if (!state.cleanedText) { setStatus('clean the material first', 'err'); return; }
+  if (!state.redactedText) { setStatus('redact the material first', 'err'); return; }
 
   const keyStatus = await window.bones.claudeKeyStatus();
   if (!keyStatus || !keyStatus.hasKey) {
@@ -779,15 +834,28 @@ $('#btn-cannon').addEventListener('click', async () => {
   const startedAt = Date.now();
   setStatus('sending to Claude…', 'warn');
   try {
-    const res = await window.bones.claudeSend({ prompt: promptText, material: state.cleanedText }, runId);
+    const res = await window.bones.claudeSend({ prompt: promptText, material: state.redactedText }, runId);
     if (res && res.error) {
       $('#cannon-output').textContent += '\n\n[Error: ' + res.error.message + ']';
       setStatus('Claude error', 'err');
     } else {
-      state.lastCannonResponse = $('#cannon-output').textContent;
+      // The output box was filled by the streaming token sink; capture both
+      // the raw (redacted) response and the re-identified version, then show
+      // the re-identified one by default when we have a redaction map.
+      state.cannonResponseRaw = $('#cannon-output').textContent;
+      const filled = reidentify(state.cannonResponseRaw);
+      state.cannonResponseFilled = filled.text;
+      const hasMap = Object.keys(state.redactMap).length > 0;
+      state.cannonShowFilled = hasMap;
+      $('#btn-toggle-reidentify').hidden = !hasMap;
+      setCannonView();
+      state.lastCannonResponse = state.cannonShowFilled
+        ? state.cannonResponseFilled
+        : state.cannonResponseRaw;
       $('#btn-cannon-save-brain').disabled = false;
       const secs = ((Date.now() - startedAt) / 1000).toFixed(1);
-      setStatus(`Claude · ${res.model || 'done'} · ${secs}s`, 'ok');
+      const reidentMsg = filled.count ? ` · re-identified ${filled.count}` : '';
+      setStatus(`Claude · ${res.model || 'done'} · ${secs}s${reidentMsg}`, 'ok');
     }
   } catch (err) {
     $('#cannon-output').textContent += '\n\n[Error: ' + err.message + ']';
@@ -805,10 +873,14 @@ $('#btn-cannon-cancel').addEventListener('click', () => {
 });
 
 $('#btn-cannon-save-brain').addEventListener('click', async () => {
-  if (!state.lastCannonResponse) return;
+  // Save whichever view the user is currently looking at — they can flip
+  // before saving if they want the de-identified one in Brain instead.
+  const body = state.cannonShowFilled ? state.cannonResponseFilled : state.cannonResponseRaw;
+  if (!body) return;
+  const tag = state.cannonShowFilled ? '' : ' (redacted)';
   await window.bones.brainAdd({
-    title: `Claude: ${$('#prompt-body').value.trim().slice(0, 50)}`,
-    body: state.lastCannonResponse,
+    title: `Claude${tag}: ${$('#prompt-body').value.trim().slice(0, 50)}`,
+    body,
     source: state.files.map((f) => f.name || f.path),
   });
   setStatus('saved to Brain', 'ok');

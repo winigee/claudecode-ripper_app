@@ -14,9 +14,13 @@ const MAX_TOKENS = 4096;
 
 const CANNON_SYSTEM =
   'You are assisting with analysis of de-identified material. Names of people, '
-  + 'companies, and addresses have been replaced with placeholders like [PERSON_1] '
-  + 'or [COMPANY_2]; treat each placeholder as a consistent stand-in for one real '
-  + 'entity and refer to them by their placeholder. Follow the user\'s instructions exactly.';
+  + 'companies, and addresses have been replaced with placeholders such as '
+  + '[PERSON_1], [COMPANY_2], [ADDRESS_1], [EMAIL_1], [PHONE_1], [POSTCODE_1]. '
+  + 'Each placeholder is a consistent stand-in for one real entity throughout the '
+  + 'material. When you refer to one of these entities in your response, write the '
+  + 'placeholder VERBATIM and unchanged, including the square brackets and the '
+  + 'number — do not rename, paraphrase, summarise, or invent new placeholders, '
+  + 'and do not drop the brackets. Follow the user\'s instructions exactly.';
 
 function getApiConfig() {
   const cfg = config.readConfig();
