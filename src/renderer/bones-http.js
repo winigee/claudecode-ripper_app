@@ -137,6 +137,17 @@
     docSearch: async () => ({ results: [], note: 'Document search is only available on the host Mac.' }),
     onDocSearchProgress: () => {},
 
+    // CLEAN + cannon + prompt library — desktop only for now
+    clean: async () => ({ error: { message: 'CLEAN is only available on the host Mac.' } }),
+    onCleanProgress: () => {},
+    promptList: async () => [],
+    promptSave: async () => ({ error: 'host only' }),
+    promptDelete: async () => ({ ok: false }),
+    claudeKeyStatus: async () => ({ hasKey: false, model: '', host: false }),
+    claudeSetKey: async () => ({ error: 'host only' }),
+    claudeSetModel: async () => ({ error: 'host only' }),
+    claudeSend: async () => ({ error: { message: 'Send to Claude is only available on the host Mac.' } }),
+
     // Brain
     brainList: () => GET('/api/brain'),
     brainAdd: (note) => POST('/api/brain', note),

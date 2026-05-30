@@ -14,6 +14,13 @@ const state = {
   currentMessages: [],
   pendingAgentEl: null,
   pendingAgentText: '',
+  // Token routing for non-chat streams
+  tokenSink: null, // 'cannon' | null
+  // Cannon
+  cleanedText: '',
+  prompts: [],
+  selectedPrompt: null,
+  lastCannonResponse: '',
 };
 
 function escapeHtml(s) {
@@ -285,6 +292,15 @@ window.bones.onToken(({ runId, delta }) => {
     root.scrollTop = root.scrollHeight;
     return;
   }
+  // Cannon path (Claude API response)
+  if (state.tokenSink === 'cannon') {
+    const co = $('#cannon-output');
+    if (co) {
+      co.textContent += delta;
+      co.scrollTop = co.scrollHeight;
+    }
+    return;
+  }
   // Work path
   const out = $('#output');
   if (out) {
@@ -384,6 +400,7 @@ async function run(kind) {
   }
   const runId = 'r-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   state.currentRunId = runId;
+  state.tokenSink = null;
   const startedAt = Date.now();
   setStatus(`${kind} · thinking…`, 'warn');
   $('#output').textContent = '';
@@ -534,6 +551,269 @@ $('#search-query').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
 });
 
+// ===== CLEAN & CANNON =====
+
+const CLEAN_LABELS = {
+  model: 'Scanning for names with the local model…',
+  redacting: 'Redacting…',
+  done: '',
+};
+
+if (window.bones.onCleanProgress) {
+  window.bones.onCleanProgress((p) => {
+    if (p.runId !== state.currentRunId) return;
+    const el = $('#clean-progress');
+    if (!el) return;
+    let msg = CLEAN_LABELS[p.stage] || '';
+    if (p.stage === 'model' && p.chunk) msg = `Scanning for names with the local model… (part ${p.chunk}/${p.of})`;
+    if (!msg) { el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = msg;
+  });
+}
+
+function materialForClean() {
+  const pasted = $('#paste-area').value.trim();
+  if (pasted) return pasted;
+  if (state.files.length > 0) return state.files.map((f) => `--- ${f.name || f.path} ---\n${f.text}`).join('\n\n');
+  return '';
+}
+
+function renderCleanSummary(res) {
+  const el = $('#clean-summary');
+  const counts = res.counts || {};
+  const labelMap = { PERSON: 'people', COMPANY: 'companies', ADDRESS: 'addresses', EMAIL: 'emails', PHONE: 'phone numbers', POSTCODE: 'postcodes' };
+  const parts = Object.keys(counts).map((k) => `${counts[k]} ${labelMap[k] || k.toLowerCase()}`);
+  if (parts.length === 0) {
+    el.innerHTML = '<span class="muted">Nothing matched to redact. Review the text before sending anyway.</span>';
+  } else {
+    el.innerHTML = `<strong>${res.total}</strong> item(s) replaced: ${escapeHtml(parts.join(', '))}.`
+      + (res.truncated ? ' <span class="muted">(name scan covered the first part of very long material)</span>' : '');
+  }
+}
+
+$('#btn-clean').addEventListener('click', async () => {
+  const material = materialForClean();
+  if (!material) {
+    $('#clean-summary').innerHTML = '<span class="muted">Drop or paste some material first.</span>';
+    return;
+  }
+  const useModel = $('#clean-model').checked;
+  if (useModel && !state.serverReady) {
+    $('#clean-summary').innerHTML = '<span class="muted">Local model not ready — cleaning with patterns only.</span>';
+  }
+  const runId = 'cl-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  state.currentRunId = runId;
+  $('#btn-clean').disabled = true;
+  setStatus('cleaning…', 'warn');
+  try {
+    const res = await window.bones.clean({ text: material, useModel: useModel && state.serverReady }, runId);
+    if (res && res.error) {
+      $('#clean-summary').innerHTML = `<span class="muted">Error: ${escapeHtml(res.error.message)}</span>`;
+      setStatus('clean error', 'err');
+      return;
+    }
+    state.cleanedText = res.text || '';
+    renderCleanSummary(res);
+    const out = $('#clean-output');
+    out.hidden = false;
+    out.value = state.cleanedText;
+    $('#cannon-send').hidden = false;
+    await loadPromptLibrary();
+    await refreshCannonKeyLabel();
+    setStatus('cleaned · review before sending', 'ok');
+  } catch (err) {
+    $('#clean-summary').innerHTML = `<span class="muted">Error: ${escapeHtml(err.message)}</span>`;
+    setStatus('clean error', 'err');
+  } finally {
+    state.currentRunId = null;
+    $('#btn-clean').disabled = false;
+    $('#clean-progress').hidden = true;
+  }
+});
+
+// Keep edits to the cleaned text as the source of truth for sending.
+$('#clean-output').addEventListener('input', (e) => { state.cleanedText = e.target.value; });
+
+// ----- Prompt library -----
+
+async function loadPromptLibrary() {
+  state.prompts = (await window.bones.promptList()) || [];
+  const sel = $('#prompt-select');
+  sel.innerHTML = '<option value="custom">Custom (write your own)</option>';
+  const builtins = state.prompts.filter((p) => p.builtin);
+  const users = state.prompts.filter((p) => !p.builtin);
+  if (builtins.length) {
+    const g = document.createElement('optgroup');
+    g.label = 'Library';
+    for (const p of builtins) g.appendChild(new Option(p.title, p.id));
+    sel.appendChild(g);
+  }
+  if (users.length) {
+    const g = document.createElement('optgroup');
+    g.label = 'Your prompts';
+    for (const p of users) g.appendChild(new Option(p.title, p.id));
+    sel.appendChild(g);
+  }
+}
+
+function renderPromptVars(prompt) {
+  const wrap = $('#prompt-vars');
+  wrap.innerHTML = '';
+  if (!prompt || !prompt.variables || prompt.variables.length === 0) return;
+  const intro = document.createElement('div');
+  intro.className = 'prompt-vars-intro muted';
+  intro.textContent = 'Fill in the prompt:';
+  wrap.appendChild(intro);
+  for (const v of prompt.variables) {
+    const row = document.createElement('div');
+    row.className = 'prompt-var-row';
+    const label = document.createElement('label');
+    label.textContent = v;
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.dataset.var = v;
+    input.placeholder = v;
+    input.addEventListener('input', applyPromptVars);
+    row.appendChild(label);
+    row.appendChild(input);
+    wrap.appendChild(row);
+  }
+}
+
+function applyPromptVars() {
+  if (!state.selectedPrompt) return;
+  const values = {};
+  $$('#prompt-vars input[data-var]').forEach((i) => { values[i.dataset.var] = i.value; });
+  // Fill {{var}} client-side (mirror of main's fillVariables).
+  const body = state.selectedPrompt.body.replace(/\{\{\s*([a-zA-Z0-9_ -]+?)\s*\}\}/g, (_f, raw) => {
+    const name = raw.trim();
+    const val = values[name];
+    return val == null || val === '' ? `{{${name}}}` : val;
+  });
+  $('#prompt-body').value = body;
+}
+
+$('#prompt-select').addEventListener('change', (e) => {
+  const id = e.target.value;
+  const isUser = id.startsWith('user-');
+  $('#btn-prompt-delete').hidden = !isUser;
+  if (id === 'custom') {
+    state.selectedPrompt = null;
+    $('#prompt-vars').innerHTML = '';
+    $('#prompt-body').value = '';
+    $('#prompt-body').focus();
+    return;
+  }
+  const prompt = state.prompts.find((p) => p.id === id);
+  state.selectedPrompt = prompt || null;
+  renderPromptVars(prompt);
+  if (prompt) {
+    $('#prompt-body').value = prompt.body;
+    applyPromptVars();
+  }
+});
+
+$('#btn-prompt-save').addEventListener('click', async () => {
+  const body = $('#prompt-body').value.trim();
+  if (!body) { setStatus('write a prompt first', 'err'); return; }
+  const title = prompt('Name this prompt for your library:', (state.selectedPrompt && !state.selectedPrompt.builtin) ? state.selectedPrompt.title : '');
+  if (title == null) return;
+  const saved = await window.bones.promptSave({ title: title || 'Untitled prompt', body });
+  await loadPromptLibrary();
+  if (saved && saved.id) {
+    $('#prompt-select').value = saved.id;
+    $('#prompt-select').dispatchEvent(new Event('change'));
+  }
+  setStatus('prompt saved', 'ok');
+});
+
+$('#btn-prompt-delete').addEventListener('click', async () => {
+  const id = $('#prompt-select').value;
+  if (!id.startsWith('user-')) return;
+  if (!confirm('Delete this prompt from your library?')) return;
+  await window.bones.promptDelete(id);
+  await loadPromptLibrary();
+  $('#prompt-select').value = 'custom';
+  $('#prompt-select').dispatchEvent(new Event('change'));
+});
+
+// ----- Fire the cannon -----
+
+async function refreshCannonKeyLabel() {
+  const st = await window.bones.claudeKeyStatus();
+  const label = $('#cannon-model-label');
+  if (st && st.hasKey) {
+    label.textContent = `via ${st.model}`;
+    $('#cannon-nokey').hidden = true;
+    $('#btn-cannon').disabled = false;
+  } else {
+    label.textContent = '';
+    $('#cannon-nokey').hidden = false;
+    $('#btn-cannon').disabled = false; // still clickable; will show the hint
+  }
+}
+
+$('#btn-cannon').addEventListener('click', async () => {
+  if (state.currentRunId) return;
+  const promptText = $('#prompt-body').value.trim();
+  if (!promptText) { setStatus('add a prompt to send', 'err'); return; }
+  const unfilled = promptText.match(/\{\{[^}]+\}\}/g);
+  if (unfilled && !confirm(`This prompt still has unfilled blanks (${unfilled.join(', ')}). Send anyway?`)) return;
+  if (!state.cleanedText) { setStatus('clean the material first', 'err'); return; }
+
+  const keyStatus = await window.bones.claudeKeyStatus();
+  if (!keyStatus || !keyStatus.hasKey) {
+    $('#cannon-nokey').hidden = false;
+    setStatus('no API key — see Settings', 'err');
+    return;
+  }
+
+  const runId = 'ca-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  state.currentRunId = runId;
+  state.tokenSink = 'cannon';
+  $('#cannon-output').textContent = '';
+  $('#btn-cannon').disabled = true;
+  $('#btn-cannon-cancel').hidden = false;
+  $('#btn-cannon-save-brain').disabled = true;
+  const startedAt = Date.now();
+  setStatus('sending to Claude…', 'warn');
+  try {
+    const res = await window.bones.claudeSend({ prompt: promptText, material: state.cleanedText }, runId);
+    if (res && res.error) {
+      $('#cannon-output').textContent += '\n\n[Error: ' + res.error.message + ']';
+      setStatus('Claude error', 'err');
+    } else {
+      state.lastCannonResponse = $('#cannon-output').textContent;
+      $('#btn-cannon-save-brain').disabled = false;
+      const secs = ((Date.now() - startedAt) / 1000).toFixed(1);
+      setStatus(`Claude · ${res.model || 'done'} · ${secs}s`, 'ok');
+    }
+  } catch (err) {
+    $('#cannon-output').textContent += '\n\n[Error: ' + err.message + ']';
+    setStatus('Claude error', 'err');
+  } finally {
+    state.currentRunId = null;
+    state.tokenSink = null;
+    $('#btn-cannon').disabled = false;
+    $('#btn-cannon-cancel').hidden = true;
+  }
+});
+
+$('#btn-cannon-cancel').addEventListener('click', () => {
+  if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+});
+
+$('#btn-cannon-save-brain').addEventListener('click', async () => {
+  if (!state.lastCannonResponse) return;
+  await window.bones.brainAdd({
+    title: `Claude: ${$('#prompt-body').value.trim().slice(0, 50)}`,
+    body: state.lastCannonResponse,
+    source: state.files.map((f) => f.name || f.path),
+  });
+  setStatus('saved to Brain', 'ok');
+});
+
 // ===== BRAIN =====
 $('#btn-save-brain').addEventListener('click', async () => {
   if (!state.lastOutput) return;
@@ -590,6 +870,42 @@ async function refreshSettings() {
   refreshLog();
   refreshModelList();
   refreshSharing();
+  refreshApiSettings();
+}
+
+async function refreshApiSettings() {
+  if (!window.bones.claudeKeyStatus) return;
+  const st = await window.bones.claudeKeyStatus();
+  const status = $('#api-key-status');
+  if (st && st.host === false) {
+    // Browser-served renderer — hide the whole API section.
+    const sec = $('#setting-api');
+    if (sec) sec.style.display = 'none';
+    return;
+  }
+  if (st && st.hasKey) {
+    status.textContent = `Key saved (…${st.last4}). Sending via ${st.model}.`;
+  } else {
+    status.textContent = 'No key set. Get one at console.anthropic.com.';
+  }
+  if (st && st.model) $('#api-model').value = st.model;
+}
+
+if (document.getElementById('api-key')) {
+  $('#btn-save-key').addEventListener('click', async () => {
+    const key = $('#api-key').value.trim();
+    if (!key) { setStatus('paste a key first', 'err'); return; }
+    await window.bones.claudeSetKey(key);
+    $('#api-key').value = '';
+    setStatus('API key saved', 'ok');
+    refreshApiSettings();
+    refreshCannonKeyLabel();
+  });
+  $('#api-model').addEventListener('change', async (e) => {
+    await window.bones.claudeSetModel(e.target.value);
+    refreshApiSettings();
+    refreshCannonKeyLabel();
+  });
 }
 
 async function refreshSharing() {

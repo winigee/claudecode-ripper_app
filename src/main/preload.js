@@ -31,6 +31,21 @@ contextBridge.exposeInMainWorld('bones', {
   docSearch: (payload, runId) => ipcRenderer.invoke('docsearch:run', payload, runId),
   onDocSearchProgress: (cb) => ipcRenderer.on('docsearch:progress', (_e, p) => cb(p)),
 
+  // CLEAN (redaction)
+  clean: (payload, runId) => ipcRenderer.invoke('clean:run', payload, runId),
+  onCleanProgress: (cb) => ipcRenderer.on('clean:progress', (_e, p) => cb(p)),
+
+  // Prompt library
+  promptList: () => ipcRenderer.invoke('prompts:list'),
+  promptSave: (p) => ipcRenderer.invoke('prompts:save', p),
+  promptDelete: (id) => ipcRenderer.invoke('prompts:delete', id),
+
+  // Claude API (cannon)
+  claudeKeyStatus: () => ipcRenderer.invoke('claude:key-status'),
+  claudeSetKey: (key) => ipcRenderer.invoke('claude:set-key', key),
+  claudeSetModel: (model) => ipcRenderer.invoke('claude:set-model', model),
+  claudeSend: (payload, runId) => ipcRenderer.invoke('claude:send', payload, runId),
+
   // Brain
   brainList: () => ipcRenderer.invoke('brain:list'),
   brainAdd: (note) => ipcRenderer.invoke('brain:add', note),

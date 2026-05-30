@@ -8,6 +8,9 @@ const modelDownload = require('./model-download');
 
 const ingest = require('./ingest');
 const docsearch = require('./docsearch');
+const redact = require('./redact');
+const prompts = require('./prompts');
+const claudeApi = require('./claude-api');
 const brain = require('./brain');
 const chats = require('./chats');
 const webServer = require('./web-server');
@@ -253,6 +256,48 @@ ipcMain.handle('docsearch:run', async (event, payload, runId) => {
       try { event.sender.send('docsearch:progress', { runId, ...p }); } catch (_) {}
     };
     return await docsearch.search(payload || {}, { onProgress, signal: ctrl.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') return { error: { message: 'Cancelled', code: 'CANCELLED' } };
+    return errorPayload(err);
+  } finally {
+    activeRuns.delete(runId);
+  }
+});
+
+// --- CLEAN (redaction) ---
+ipcMain.handle('clean:run', async (event, payload, runId) => {
+  const ctrl = new AbortController();
+  activeRuns.set(runId, ctrl);
+  try {
+    const onProgress = (p) => {
+      try { event.sender.send('clean:progress', { runId, ...p }); } catch (_) {}
+    };
+    return await redact.clean(payload.text || '', { useModel: payload.useModel !== false }, { onProgress, signal: ctrl.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') return { error: { message: 'Cancelled', code: 'CANCELLED' } };
+    return errorPayload(err);
+  } finally {
+    activeRuns.delete(runId);
+  }
+});
+
+// --- Prompt library ---
+ipcMain.handle('prompts:list', () => prompts.list());
+ipcMain.handle('prompts:save', (_e, p) => prompts.save(p || {}));
+ipcMain.handle('prompts:delete', (_e, id) => prompts.remove(id));
+
+// --- Claude API (cannon) ---
+ipcMain.handle('claude:key-status', () => claudeApi.keyStatus());
+ipcMain.handle('claude:set-key', (_e, key) => claudeApi.setKey(key));
+ipcMain.handle('claude:set-model', (_e, model) => claudeApi.setModel(model));
+ipcMain.handle('claude:send', async (event, payload, runId) => {
+  const ctrl = new AbortController();
+  activeRuns.set(runId, ctrl);
+  try {
+    const onToken = (t) => {
+      try { event.sender.send('llama:token', { runId, delta: t }); } catch (_) {}
+    };
+    return await claudeApi.send(payload || {}, { onToken, signal: ctrl.signal });
   } catch (err) {
     if (err.name === 'AbortError') return { error: { message: 'Cancelled', code: 'CANCELLED' } };
     return errorPayload(err);
