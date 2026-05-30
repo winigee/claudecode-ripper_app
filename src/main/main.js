@@ -7,6 +7,7 @@ const llama = require('./llama');
 const modelDownload = require('./model-download');
 
 const ingest = require('./ingest');
+const docsearch = require('./docsearch');
 const brain = require('./brain');
 const chats = require('./chats');
 const webServer = require('./web-server');
@@ -242,6 +243,22 @@ ipcMain.handle('llama:cancel', (_e, runId) => {
     return { ok: true };
   }
   return { ok: false };
+});
+
+ipcMain.handle('docsearch:run', async (event, payload, runId) => {
+  const ctrl = new AbortController();
+  activeRuns.set(runId, ctrl);
+  try {
+    const onProgress = (p) => {
+      try { event.sender.send('docsearch:progress', { runId, ...p }); } catch (_) {}
+    };
+    return await docsearch.search(payload || {}, { onProgress, signal: ctrl.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') return { error: { message: 'Cancelled', code: 'CANCELLED' } };
+    return errorPayload(err);
+  } finally {
+    activeRuns.delete(runId);
+  }
 });
 
 ipcMain.handle('ingest:paths', async (_e, paths) => {

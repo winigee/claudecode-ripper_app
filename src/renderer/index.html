@@ -80,7 +80,7 @@
       <!-- Work tab -->
       <section id="tab-work" class="tab-panel">
         <h2>Work</h2>
-        <p class="hint">Drag a folder or files for a structured summary or compact.</p>
+        <p class="hint">Drag a folder or files, then summarise, compact, or search them.</p>
         <div id="dropzone">
           <p>Drag a folder or files here, or paste text below.</p>
           <div class="dz-buttons">
@@ -90,6 +90,26 @@
           </div>
         </div>
         <div id="files-summary"></div>
+
+        <!-- Find documents (structured / semantic search) -->
+        <div class="docsearch">
+          <h3>Find documents</h3>
+          <p class="hint">Search the loaded files by meaning, not just exact words. Bones expands your query with related terms, ranks every file, then judges the closest matches.</p>
+          <div class="row search-row">
+            <input id="search-query" type="text" placeholder="e.g. agreements mentioning early termination penalties" />
+            <button id="btn-search" class="primary">Find</button>
+            <button id="btn-search-cancel" hidden>Cancel</button>
+          </div>
+          <label class="search-opt">
+            <input type="checkbox" id="search-expand" checked />
+            Expand query with related terms (finds similar content, slower)
+          </label>
+          <div id="search-progress" class="search-progress muted" hidden></div>
+          <div id="search-results" class="search-results"></div>
+        </div>
+
+        <hr class="work-sep" />
+
         <textarea id="paste-area" placeholder="Or paste content here (overrides dropped files if non-empty)."></textarea>
         <div class="row">
           <input id="instructions" type="text" placeholder="Optional: additional instructions" />
@@ -155,13 +175,17 @@
         </div>
 
         <div class="setting">
-          <label>About BonesAI v2.2.0</label>
+          <label>About BonesAI v2.3.0</label>
           <p class="hint">
             <strong>Local-first.</strong> All inference runs on this Mac via llamafile + a local model.
             No network call is made during ordinary use.
           </p>
           <p class="hint">
-            v2.2.0 adds Network sharing — open BonesAI in a browser on other devices on the same
+            v2.3.0 adds Find documents — point Bones at a folder in Work and search it by meaning.
+            It expands your query with related terms, ranks every file, then judges the closest matches.
+          </p>
+          <p class="hint">
+            v2.2.0 added Network sharing — open BonesAI in a browser on other devices on the same
             Wi-Fi, or over Tailscale for access from anywhere. Token-protected.
           </p>
           <p class="hint">

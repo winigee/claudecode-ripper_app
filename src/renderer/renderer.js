@@ -416,6 +416,124 @@ async function run(kind) {
   }
 }
 
+// ===== DOCUMENT SEARCH =====
+const PROGRESS_LABELS = {
+  expanding: 'Expanding query with related terms…',
+  scanning: 'Scanning files…',
+  judging: 'Judging the closest matches with the model…',
+  done: '',
+};
+
+function renderSearchProgress(p) {
+  const el = $('#search-progress');
+  if (!el) return;
+  let msg = PROGRESS_LABELS[p.stage] || '';
+  if (p.stage === 'scanning' && p.total != null) msg = `Scanning ${p.total} file(s)…`;
+  if (p.stage === 'judging' && p.count != null) msg = `Judging ${p.count} closest match(es) with the model…`;
+  if (!msg) { el.hidden = true; return; }
+  el.hidden = false;
+  el.textContent = msg;
+}
+
+if (window.bones.onDocSearchProgress) {
+  window.bones.onDocSearchProgress((p) => {
+    if (p.runId !== state.currentRunId) return;
+    renderSearchProgress(p);
+  });
+}
+
+function relevanceBadge(rel) {
+  const map = {
+    strong: '<span class="rel-badge strong">strong match</span>',
+    possible: '<span class="rel-badge possible">possible</span>',
+    weak: '<span class="rel-badge weak">weak</span>',
+  };
+  return map[rel] || '';
+}
+
+function renderSearchResults(res) {
+  const root = $('#search-results');
+  if (!res || res.error) {
+    root.innerHTML = `<p class="muted">${escapeHtml(res && res.error ? res.error.message : 'Search failed.')}</p>`;
+    return;
+  }
+  if (!res.results || res.results.length === 0) {
+    root.innerHTML = `<p class="muted">${escapeHtml(res.note || 'No matches.')}</p>`;
+    return;
+  }
+  let html = `<div class="search-meta muted">${res.results.length} match(es) of ${res.scanned || '?'} file(s) scanned`;
+  if (res.expandedTerms && res.expandedTerms.length) {
+    html += ` · also searched: ${escapeHtml(res.expandedTerms.slice(0, 8).join(', '))}`;
+  }
+  html += '</div>';
+  for (const r of res.results) {
+    html += `
+      <div class="result-card ${escapeHtml(r.relevance || '')}">
+        <div class="result-head">
+          <span class="result-name">${escapeHtml(r.name)}</span>
+          ${relevanceBadge(r.relevance)}
+        </div>
+        ${r.reason ? `<div class="result-reason">${escapeHtml(r.reason)}</div>` : ''}
+        <div class="result-snippet">${escapeHtml(r.snippet || '')}</div>
+        <div class="result-path muted">${escapeHtml(r.path || '')}</div>
+      </div>`;
+  }
+  root.innerHTML = html;
+}
+
+async function runSearch() {
+  if (!state.serverReady) { setStatus('model not ready', 'err'); return; }
+  if (state.currentRunId) return;
+  const query = $('#search-query').value.trim();
+  if (!query) { setStatus('type something to search for', 'err'); return; }
+  if (state.files.length === 0) {
+    $('#search-results').innerHTML = '<p class="muted">Drop or pick some files first, then search them.</p>';
+    return;
+  }
+  const expand = $('#search-expand').checked;
+  const payload = {
+    files: state.files.map((f) => ({ name: f.name, path: f.path, text: f.text })),
+    query,
+    expand,
+  };
+
+  const runId = 's-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  state.currentRunId = runId;
+  const startedAt = Date.now();
+  $('#btn-search').disabled = true;
+  $('#btn-search-cancel').hidden = false;
+  $('#search-results').innerHTML = '';
+  setStatus('searching…', 'warn');
+
+  try {
+    const res = await window.bones.docSearch(payload, runId);
+    renderSearchResults(res);
+    if (res && res.error) {
+      setStatus('search error', 'err');
+    } else {
+      const secs = ((Date.now() - startedAt) / 1000).toFixed(1);
+      const n = (res.results || []).length;
+      setStatus(`search · ${n} match(es) · ${secs}s`, 'ok');
+    }
+  } catch (err) {
+    $('#search-results').innerHTML = `<p class="muted">Error: ${escapeHtml(err.message)}</p>`;
+    setStatus('search error', 'err');
+  } finally {
+    state.currentRunId = null;
+    $('#btn-search').disabled = false;
+    $('#btn-search-cancel').hidden = true;
+    $('#search-progress').hidden = true;
+  }
+}
+
+$('#btn-search').addEventListener('click', runSearch);
+$('#btn-search-cancel').addEventListener('click', () => {
+  if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+});
+$('#search-query').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
+});
+
 // ===== BRAIN =====
 $('#btn-save-brain').addEventListener('click', async () => {
   if (!state.lastOutput) return;

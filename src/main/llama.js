@@ -46,7 +46,7 @@ function clipForContext(text) {
   };
 }
 
-async function chatStream({ system, user, onToken, signal }) {
+async function chatStream({ system, user, onToken, signal, temperature = 0.3 }) {
   const port = llamaServer.getPort();
   if (!port) throw new Error('llama-server is not running.');
 
@@ -56,7 +56,7 @@ async function chatStream({ system, user, onToken, signal }) {
     body: JSON.stringify({
       model: 'local',
       stream: true,
-      temperature: 0.3,
+      temperature,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
@@ -190,6 +190,13 @@ async function chat({ messages }, { onToken, signal } = {}) {
   return { text: full, model: 'qwen2.5-7b-instruct-q4_k_m' };
 }
 
+// Non-streaming completion. Used by docsearch for query expansion and
+// relevance judging, where we want the full text back but don't stream
+// tokens to the renderer. Low temperature for deterministic, parseable output.
+async function complete({ system, user, temperature = 0.2, signal } = {}) {
+  return chatStream({ system, user, temperature, signal });
+}
+
 async function ping() {
   const text = await chatStream({
     system: 'You are a test endpoint. Reply with the single word: pong',
@@ -198,4 +205,4 @@ async function ping() {
   return { ok: true, text: text.trim().slice(0, 50), model: 'qwen2.5-7b-instruct-q4_k_m' };
 }
 
-module.exports = { summarise, compact, chat, ping };
+module.exports = { summarise, compact, chat, ping, complete };

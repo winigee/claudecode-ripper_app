@@ -576,6 +576,98 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   color: var(--muted);
 }
 
+/* --- Document search --- */
+.docsearch {
+  margin: 16px 0;
+  padding: 14px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.docsearch h3 {
+  margin: 0 0 4px;
+  font-size: 14px;
+  color: var(--accent);
+}
+.search-row { gap: 8px; align-items: center; }
+.search-row #search-query {
+  flex: 1;
+  min-width: 0;
+}
+.search-opt {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.search-progress {
+  margin-top: 10px;
+  font-size: 12px;
+  font-style: italic;
+}
+.search-results { margin-top: 12px; }
+.search-meta {
+  font-size: 11.5px;
+  margin-bottom: 10px;
+}
+.result-card {
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--muted);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--bg-3);
+}
+.result-card.strong { border-left-color: var(--ok); }
+.result-card.possible { border-left-color: var(--accent); }
+.result-card.weak { border-left-color: var(--warn); }
+.result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.result-name {
+  font-weight: 600;
+  color: var(--text);
+  font-size: 13px;
+  word-break: break-all;
+}
+.rel-badge {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.rel-badge.strong { background: rgba(92, 210, 168, 0.18); color: var(--ok); }
+.rel-badge.possible { background: rgba(76, 199, 255, 0.16); color: var(--accent); }
+.rel-badge.weak { background: rgba(240, 196, 107, 0.16); color: var(--warn); }
+.result-reason {
+  font-size: 12px;
+  color: var(--accent-2);
+  margin: 4px 0 6px;
+}
+.result-snippet {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+.result-path {
+  font-size: 10.5px;
+  margin-top: 6px;
+  word-break: break-all;
+}
+.work-sep {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 18px 0;
+}
+
 /* --- Sidebar collapse on narrow screens (mobile) --- */
 .sidebar-toggle {
   display: none;

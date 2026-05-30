@@ -133,6 +133,10 @@
     pickFiles: async () => ({ files: [], skipped: [] }),
     pickFolder: async () => ({ files: [], skipped: [] }),
 
+    // Document search — needs host filesystem; desktop only for now
+    docSearch: async () => ({ results: [], note: 'Document search is only available on the host Mac.' }),
+    onDocSearchProgress: () => {},
+
     // Brain
     brainList: () => GET('/api/brain'),
     brainAdd: (note) => POST('/api/brain', note),

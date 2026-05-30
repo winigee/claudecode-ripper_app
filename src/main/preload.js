@@ -27,6 +27,10 @@ contextBridge.exposeInMainWorld('bones', {
   pickFiles: () => ipcRenderer.invoke('ingest:pick-files'),
   pickFolder: () => ipcRenderer.invoke('ingest:pick-folder'),
 
+  // Document search
+  docSearch: (payload, runId) => ipcRenderer.invoke('docsearch:run', payload, runId),
+  onDocSearchProgress: (cb) => ipcRenderer.on('docsearch:progress', (_e, p) => cb(p)),
+
   // Brain
   brainList: () => ipcRenderer.invoke('brain:list'),
   brainAdd: (note) => ipcRenderer.invoke('brain:add', note),
