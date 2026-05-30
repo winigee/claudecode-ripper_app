@@ -773,44 +773,177 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   color: var(--text);
 }
 
-/* --- Sidebar collapse on narrow screens (mobile) --- */
-.sidebar-toggle {
-  display: none;
-  position: absolute;
-  top: 14px;
-  left: 14px;
-  z-index: 5;
-  padding: 6px 10px;
-  background: var(--bg-3);
-  border: 1px solid var(--border-hi);
-  color: var(--accent);
-  border-radius: 4px;
-  font-size: 13px;
-  cursor: pointer;
-  -webkit-app-region: no-drag;
-}
+/* --- Mobile-only chrome (hidden on desktop) --- */
+.sidebar-toggle, .mobile-topbar, .bottom-nav { display: none; }
 
+/* === Mobile layout ===
+   On a phone the desktop sidebar+main layout is replaced by:
+   - a thin top bar (brand + live status)
+   - a single full-width main panel
+   - a bottom tab bar (iOS convention)
+   - the sidebar becomes a slide-over drawer that holds the chat list,
+     opened by the "☰ Chats" pill in the top-left.
+   Safe-area insets keep the top bar clear of the Dynamic Island and the
+   bottom bar clear of the home indicator. */
 @media (max-width: 760px) {
+  :root {
+    --sa-top: env(safe-area-inset-top, 0px);
+    --sa-bottom: env(safe-area-inset-bottom, 0px);
+    --topbar-h: 44px;
+    --bottomnav-h: 64px;
+  }
+
+  html, body {
+    height: 100dvh; /* dynamic viewport — collapses with the URL bar */
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
   body { flex-direction: column; }
+
+  /* Top bar */
+  .mobile-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    z-index: 6;
+    height: calc(var(--topbar-h) + var(--sa-top));
+    padding: var(--sa-top) 14px 0;
+    background: rgba(10, 20, 38, 0.92);
+    backdrop-filter: saturate(160%) blur(12px);
+    -webkit-backdrop-filter: saturate(160%) blur(12px);
+    border-bottom: 1px solid var(--border);
+    font-size: 12.5px;
+    color: var(--text-dim);
+  }
+  .mobile-brand { font-weight: 700; letter-spacing: 1px; font-size: 13px; }
+  .mobile-status { font-size: 11.5px; opacity: 0.85; }
+  .mobile-status.ok { color: var(--ok); }
+  .mobile-status.warn { color: var(--warn); }
+  .mobile-status.err { color: var(--err); }
+
+  /* Chats drawer pill — sits below the safe area */
+  .sidebar-toggle {
+    display: block;
+    position: fixed;
+    top: calc(var(--sa-top) + var(--topbar-h) + 8px);
+    left: 12px;
+    z-index: 5;
+    padding: 6px 12px;
+    background: var(--bg-3);
+    border: 1px solid var(--border-hi);
+    color: var(--accent);
+    border-radius: 999px;
+    font-size: 12px;
+    cursor: pointer;
+    min-height: 30px;
+    touch-action: manipulation;
+  }
+
+  /* Sidebar becomes a slide-over drawer holding the chat list. The desktop
+     sidebar-nav inside it is hidden — bottom nav replaces it. */
   .sidebar {
     position: fixed;
-    inset: 0 auto 0 0;
-    z-index: 8;
+    top: 0; bottom: 0; left: 0;
+    width: min(86vw, 360px);
+    z-index: 9;
     transform: translateX(-100%);
-    transition: transform 0.18s ease;
-    box-shadow: 4px 0 16px rgba(0, 0, 0, 0.3);
+    transition: transform 0.22s ease;
+    box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+    padding-top: calc(var(--sa-top) + 12px);
+    padding-bottom: calc(var(--sa-bottom) + 12px);
   }
   .sidebar.open { transform: translateX(0); }
-  main { width: 100vw; }
-  .tab-panel { padding: 12px 16px; }
-  #tab-chat { padding: 0; }
-  .chat-messages { padding: 14px 14px; }
-  .chat-form { padding: 10px 14px; }
-  .bubble { max-width: 100%; font-size: 14px; }
-  button { padding: 8px 14px; min-height: 36px; }
-  .chat-form textarea { font-size: 16px; /* iOS won't zoom on focus if ≥16 */ }
-  .sidebar-toggle { display: block; }
-  /* Push the top of the active panel down to clear the toggle button */
-  #tab-chat .chat-empty { padding-top: 40px; }
-  #tab-work, #tab-brain, #tab-settings { padding-top: 50px; }
+  .sidebar-nav { display: none; } /* replaced by bottom-nav */
+  .sidebar .status { display: none; } /* status moved to top bar */
+
+  /* Drawer scrim — purely visual; tap the pill or a chat row to close */
+  .sidebar.open::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: -1;
+    left: min(86vw, 360px);
+  }
+
+  /* Main scroll region sits between the two bars */
+  main {
+    width: 100vw;
+    padding-top: calc(var(--sa-top) + var(--topbar-h));
+    padding-bottom: calc(var(--sa-bottom) + var(--bottomnav-h));
+    overflow: hidden;
+  }
+  .tab-panel { padding: 14px 16px; }
+  #tab-chat { padding: 0; display: none; flex-direction: column; }
+  #tab-chat.active { display: flex; }
+
+  .chat-messages { padding: 50px 14px 14px; /* clear the drawer pill */ }
+  .chat-form {
+    padding: 8px 12px calc(8px + var(--sa-bottom));
+    margin-bottom: 0;
+  }
+  .chat-form textarea { font-size: 16px; /* prevents iOS zoom-on-focus */ }
+  .bubble { max-width: 92%; font-size: 14.5px; line-height: 1.5; }
+
+  /* Touch-friendly sizing throughout */
+  button {
+    padding: 9px 14px;
+    min-height: 38px;
+    touch-action: manipulation;
+  }
+  input[type="text"], input[type="password"], select, textarea {
+    font-size: 16px; /* prevents iOS zoom-on-focus */
+  }
+
+  /* Work / Brain / Settings — clear the drawer pill */
+  #tab-work, #tab-brain, #tab-settings { padding-top: 52px; }
+
+  /* Bottom tab bar */
+  .bottom-nav {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    position: fixed;
+    left: 0; right: 0; bottom: 0;
+    z-index: 7;
+    height: calc(var(--bottomnav-h) + var(--sa-bottom));
+    padding-bottom: var(--sa-bottom);
+    background: rgba(10, 20, 38, 0.95);
+    backdrop-filter: saturate(160%) blur(12px);
+    -webkit-backdrop-filter: saturate(160%) blur(12px);
+    border-top: 1px solid var(--border);
+  }
+  .btab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    background: transparent;
+    border: none;
+    color: var(--text-dim);
+    font-size: 10.5px;
+    letter-spacing: 0.3px;
+    padding: 6px 4px;
+    min-height: 0;
+  }
+  .btab svg { opacity: 0.85; }
+  .btab.active {
+    color: var(--accent);
+    background: transparent;
+  }
+  .btab.active svg { opacity: 1; }
+  .btab:focus { outline: none; }
+
+  /* Cannon and other long sections need to scroll their parent, not the page */
+  .tab-panel { overflow-y: auto; height: calc(100dvh - var(--sa-top) - var(--topbar-h) - var(--sa-bottom) - var(--bottomnav-h)); }
+  #tab-chat { height: calc(100dvh - var(--sa-top) - var(--topbar-h) - var(--sa-bottom) - var(--bottomnav-h)); }
+  .chat-messages { overflow-y: auto; flex: 1; min-height: 0; }
+}
+
+/* Standalone PWA tweak: when launched from home screen, the safe area covers
+   the status bar fully — give the top bar a touch more breathing room. */
+@media (display-mode: standalone) {
+  .mobile-topbar { padding-top: calc(env(safe-area-inset-top, 0px) + 2px); }
 }

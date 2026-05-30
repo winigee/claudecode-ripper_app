@@ -35,17 +35,18 @@ function skullSvg(extraClass = '') {
 }
 
 // ----- Tabs -----
+// Both the sidebar nav and the mobile bottom nav share the .tab class and
+// data-tab attribute, so the same activate function drives them in sync.
+function activateTab(name) {
+  $$('.tab').forEach((b) => b.classList.toggle('active', b.dataset.tab === name));
+  $$('.tab-panel').forEach((p) => p.classList.toggle('active', p.id === 'tab-' + name));
+  if (name === 'brain') refreshBrain();
+  if (name === 'settings') refreshSettings();
+  // Close the chats drawer after navigating on mobile.
+  document.querySelector('.sidebar')?.classList.remove('open');
+}
 $$('.tab').forEach((btn) => {
-  btn.addEventListener('click', () => {
-    $$('.tab').forEach((b) => b.classList.remove('active'));
-    $$('.tab-panel').forEach((p) => p.classList.remove('active'));
-    btn.classList.add('active');
-    $('#tab-' + btn.dataset.tab).classList.add('active');
-    if (btn.dataset.tab === 'brain') refreshBrain();
-    if (btn.dataset.tab === 'settings') refreshSettings();
-    // Close sidebar on mobile after tab change
-    document.querySelector('.sidebar')?.classList.remove('open');
-  });
+  btn.addEventListener('click', () => activateTab(btn.dataset.tab));
 });
 
 // ----- Mobile sidebar toggle -----
@@ -61,6 +62,14 @@ function setStatus(text, kind) {
   const el = $('#status');
   el.textContent = text;
   el.className = 'status' + (kind ? ' ' + kind : '');
+  // Mirror to the mobile-only top bar.
+  const mob = $('#mobile-status');
+  if (mob) {
+    // The desktop pill is multi-line ("local · ready\nqwen-7b") — keep just the
+    // first line on the slim mobile bar.
+    mob.textContent = (text || '').split('\n')[0];
+    mob.className = 'mobile-status' + (kind ? ' ' + kind : '');
+  }
 }
 
 function applyServerStatus(s) {

@@ -19,11 +19,15 @@
 
   const TOKEN = getToken();
 
+  // If the URL carried the token we send it as a Bearer header so the very
+  // first API call works before the session cookie has been observed. Once
+  // installed as a PWA and reopened cold, the URL has no token but the
+  // session cookie set on the original visit is still valid and the browser
+  // sends it automatically — no Authorization header needed.
   function authHeaders(extra) {
-    return Object.assign({
-      'Authorization': 'Bearer ' + TOKEN,
-      'Content-Type': 'application/json',
-    }, extra || {});
+    const h = { 'Content-Type': 'application/json' };
+    if (TOKEN) h['Authorization'] = 'Bearer ' + TOKEN;
+    return Object.assign(h, extra || {});
   }
 
   async function GET(path) {

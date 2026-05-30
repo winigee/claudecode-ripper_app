@@ -69,13 +69,47 @@ function sendText(res, status, text, type = 'text/plain') {
   res.end(text);
 }
 
+function parseCookies(header) {
+  const out = {};
+  if (!header) return out;
+  for (const part of header.split(';')) {
+    const i = part.indexOf('=');
+    if (i < 0) continue;
+    const k = part.slice(0, i).trim();
+    const v = decodeURIComponent(part.slice(i + 1).trim());
+    if (k) out[k] = v;
+  }
+  return out;
+}
+
+// Auth is satisfied if the token appears in any of: Authorization header,
+// X-Bones-Token header, query string, or the bones-session cookie. The cookie
+// path is important — the browser only fetches stylesheets, scripts, the
+// manifest and the icons with whatever auth context it has, and it has no way
+// to know about the original ?t= URL. So the first hit also sets the cookie,
+// turning a query-string login into a session for subsequent subresources.
 function checkAuth(req, parsedUrl) {
   const cfg = getWebConfig();
   const headerTok =
     (req.headers.authorization || '').replace(/^Bearer\s+/i, '') ||
     req.headers['x-bones-token'];
   const queryTok = parsedUrl.query.t || parsedUrl.query.token;
-  return headerTok === cfg.token || queryTok === cfg.token;
+  const cookies = parseCookies(req.headers.cookie);
+  const cookieTok = cookies['bones-session'];
+  return (
+    headerTok === cfg.token ||
+    queryTok === cfg.token ||
+    cookieTok === cfg.token
+  );
+}
+
+function sessionCookieHeader(token) {
+  // 7-day cookie so an installed PWA stays signed in between launches. Not
+  // HttpOnly: the renderer's HTTP client reads the same token from sessionStorage
+  // when the URL carried it; the cookie is the persistent backup. Same security
+  // tradeoff as the query token — anyone with the URL can reach the API.
+  const maxAge = 60 * 60 * 24 * 7;
+  return `bones-session=${encodeURIComponent(token)}; Path=/; Max-Age=${maxAge}; SameSite=Lax`;
 }
 
 const STATIC_DIR = path.join(__dirname, '..', 'renderer');
@@ -87,6 +121,7 @@ const STATIC_MIME = {
   '.ico': 'image/x-icon',
   '.png': 'image/png',
   '.json': 'application/json',
+  '.webmanifest': 'application/manifest+json',
 };
 
 async function readBody(req) {
@@ -102,7 +137,7 @@ async function readBody(req) {
   });
 }
 
-function serveStatic(parsedUrl, res) {
+function serveStatic(parsedUrl, res, extraHeaders = {}) {
   let pathname = parsedUrl.pathname;
   if (pathname === '/' || pathname === '') pathname = '/index.html';
   // Restrict to renderer dir (no path traversal)
@@ -116,6 +151,7 @@ function serveStatic(parsedUrl, res) {
     res.writeHead(200, {
       'Content-Type': ctype,
       'Cache-Control': 'no-cache',
+      ...extraHeaders,
     });
     res.end(buf);
   });
@@ -234,7 +270,16 @@ async function handleRequest(req, res) {
     if (parsedUrl.pathname.startsWith('/api/')) {
       return await handleApi(req, res, parsedUrl);
     }
-    return serveStatic(parsedUrl, res);
+
+    // Static assets: if the auth came from a fresh ?t=TOKEN URL, set a session
+    // cookie so subsequent fetches (CSS, JS, manifest, icons) carry auth too.
+    const cfg = getWebConfig();
+    const cookies = parseCookies(req.headers.cookie);
+    const setCookie = (parsedUrl.query.t === cfg.token || parsedUrl.query.token === cfg.token)
+      && cookies['bones-session'] !== cfg.token
+      ? { 'Set-Cookie': sessionCookieHeader(cfg.token) }
+      : {};
+    return serveStatic(parsedUrl, res, setCookie);
   } catch (e) {
     send(res, 500, { error: e.message });
   }

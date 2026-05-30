@@ -2,11 +2,24 @@
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+      content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self';"
     />
     <title>BonesAI</title>
+
+    <!-- PWA / iOS home-screen install -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icons/icon-180.png" />
+    <link rel="icon" type="image/svg+xml" href="icons/icon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/favicon-32.png" />
+    <meta name="theme-color" content="#0a1426" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="BonesAI" />
+    <meta name="mobile-web-app-capable" content="yes" />
+
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
@@ -32,7 +45,14 @@
       <div class="status" id="status">starting…</div>
     </aside>
 
-    <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Toggle sidebar">☰</button>
+    <button id="sidebar-toggle" class="sidebar-toggle" aria-label="Open chats drawer">☰ Chats</button>
+
+    <!-- Mobile-only top bar: a thin band that holds the live status while the
+         sidebar is closed. The hamburger above sits beside it visually. -->
+    <div class="mobile-topbar" id="mobile-topbar">
+      <span class="mobile-brand"><span class="brand-bone">BONE</span><span class="brand-ai">SAI</span></span>
+      <span id="mobile-status" class="mobile-status">starting…</span>
+    </div>
 
     <main>
       <!-- Setup screen: shown only when a required file is missing -->
@@ -232,16 +252,18 @@
         </div>
 
         <div class="setting">
-          <label>About BonesAI v2.4.1</label>
+          <label>About BonesAI v2.5.0</label>
           <p class="hint">
             <strong>Local-first.</strong> Inference, search, and redaction all run on this Mac via
             llamafile + a local model. The one exception is “Send to Claude”, which reaches the
             Anthropic API on purpose — and only ever with material you have redacted first.
           </p>
           <p class="hint">
-            v2.4.1 adds re-identification: BonesAI remembers every redacted name in memory for the
-            session and puts the real names back into Claude’s reply automatically. Toggle between
-            the redacted and re-identified views with one click. The map never touches disk.
+            v2.5.0 makes BonesAI installable on iPhone as a Progressive Web App — open the URL
+            in Safari, Share → Add to Home Screen, and it runs fullscreen with a proper icon,
+            bottom tab bar, and safe-area handling for the Dynamic Island and home indicator.
+            v2.4.1 added re-identification — real names are remembered locally and put back
+            into Claude’s reply automatically.
           </p>
           <p class="hint">
             v2.2.0 added Network sharing — open BonesAI in a browser on other devices on the same
@@ -259,6 +281,37 @@
         </div>
       </section>
     </main>
+
+    <!-- Mobile-only bottom tab bar. Same data-tab values as the sidebar nav,
+         so the same click handler in renderer.js drives both. -->
+    <nav class="bottom-nav">
+      <button data-tab="chat" class="tab btab active" aria-label="Chat">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span>Chat</span>
+      </button>
+      <button data-tab="work" class="tab btab" aria-label="Work">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 7h18M3 12h18M3 17h12"/>
+        </svg>
+        <span>Work</span>
+      </button>
+      <button data-tab="brain" class="tab btab" aria-label="Brain">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9 4a3 3 0 0 0-3 3v0a3 3 0 0 0-2 5 3 3 0 0 0 0 4 3 3 0 0 0 3 4h2V4z"/>
+          <path d="M15 4a3 3 0 0 1 3 3v0a3 3 0 0 1 2 5 3 3 0 0 1 0 4 3 3 0 0 1-3 4h-2V4z"/>
+        </svg>
+        <span>Brain</span>
+      </button>
+      <button data-tab="settings" class="tab btab" aria-label="Settings">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="3"/>
+          <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h0a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v0a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>
+        </svg>
+        <span>Settings</span>
+      </button>
+    </nav>
 
     <!-- Reusable inline SVG: skull-and-crossbones, line-art -->
     <svg width="0" height="0" style="position:absolute" aria-hidden="true">
