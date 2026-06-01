@@ -1,0 +1,17 @@
+{
+  "name": "praxis-suite",
+  "productName": "Praxis",
+  "version": "0.1.0",
+  "description": "AI agentic practice management suite for law firms. BonesAI engine embedded throughout. Zero runtime dependencies.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "seed": "node server/seed.js --force"
+  },
+  "author": "Winston Green",
+  "license": "UNLICENSED",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  }
+}

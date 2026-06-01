@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Praxis — AI Practice Management</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div id="app">
+    <aside id="sidebar">
+      <div class="brand">
+        <span class="brand-mark">⚖</span>
+        <div>
+          <div class="brand-name">Praxis</div>
+          <div class="brand-sub">practice suite</div>
+        </div>
+      </div>
+      <nav id="nav">
+        <button data-view="dashboard" class="nav-btn active">📊 Dashboard</button>
+        <button data-view="matters" class="nav-btn">📁 Matters</button>
+        <button data-view="drafting" class="nav-btn">✍️ Drafting</button>
+        <button data-view="docket" class="nav-btn">📅 Docket</button>
+        <button data-view="intake" class="nav-btn">📨 Intake</button>
+        <button data-view="activity" class="nav-btn">🕘 Activity</button>
+      </nav>
+      <div class="sidebar-foot">
+        <div id="engine-pill" class="engine-pill">BonesAI: …</div>
+      </div>
+    </aside>
+
+    <main id="main">
+      <header id="topbar">
+        <div id="crumb">Dashboard</div>
+        <button id="ask-bones" class="ask-btn">🦴 Ask BonesAI</button>
+      </header>
+      <section id="view"></section>
+    </main>
+
+    <aside id="assistant" class="assistant-closed">
+      <div class="assistant-head">
+        <div>
+          <div class="assistant-title">🦴 BonesAI</div>
+          <div id="assistant-ctx" class="assistant-ctx">No matter in context</div>
+        </div>
+        <div class="assistant-head-actions">
+          <label class="protect-toggle" title="De-identify before sending to the model">
+            <input type="checkbox" id="protect-toggle" checked /> 🛡 Protect
+          </label>
+          <button id="assistant-close" class="icon-btn">✕</button>
+        </div>
+      </div>
+      <div id="chat-log" class="chat-log"></div>
+      <form id="chat-form" class="chat-form">
+        <textarea id="chat-input" placeholder="Ask about this matter, request a draft, summarise…" rows="2"></textarea>
+        <button type="submit" class="send-btn">Send</button>
+      </form>
+    </aside>
+  </div>
+
+  <div id="toast" class="toast"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

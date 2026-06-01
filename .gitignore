@@ -11,3 +11,4 @@ vendor/llama-cpp/*
 build/icon.png
 build/icon.icns
 build/icon.iconset/
+suite/data/
