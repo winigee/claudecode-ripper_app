@@ -93,6 +93,10 @@ async function matterDetail(id) {
     el('div', { class: 'btn-row' },
       el('button', { class: 'btn primary', onclick: () => { openAssistant(); } }, '🦴 Ask BonesAI about this matter'),
       el('button', { class: 'btn', onclick: () => { state.view = 'drafting'; state.draftMatter = id; setNav(); render(); } }, '✍️ Draft document'),
+      el('button', { class: 'btn', onclick: async () => {
+        try { await api.post('/watcher/timers/start', { matterId: id, attorney: m.responsibleAttorney, description: m.title }); toast('Timer started in TheWatcher.'); state.view = 'time'; setNav(); render(); }
+        catch (e) { toast(e.message.includes('unreachable') || e.message.includes('configured') ? 'Connect TheWatcher in the Time tab first.' : 'Error: ' + e.message); }
+      } }, '⏱️ Start timer'),
     ),
   );
 
@@ -249,6 +253,85 @@ function renderTriage(container, item) {
   ));
 }
 
+views.time = async () => {
+  const [st, cfg, matters] = await Promise.all([api.get('/watcher/status'), api.get('/watcher/config'), api.get('/matters')]);
+
+  // Connection card
+  const urlInput = el('input', { value: cfg.url || '', placeholder: 'http://localhost:4400' });
+  const connDot = el('span', { class: 'badge ' + (st.connected ? 'open' : st.configured ? 'high' : 'low') },
+    st.connected ? `connected · ${st.service || 'thewatcher'} ${st.version || ''}` : st.configured ? `unreachable (${st.error || '—'})` : 'not configured');
+  const connCard = el('div', { class: 'card' },
+    el('div', { class: 'section-head' }, el('h3', { style: 'margin:0' }, 'TheWatcher connection'), connDot),
+    el('p', { class: 'muted', style: 'font-size:13px' }, 'TheWatcher is an independent timekeeper. Praxis drives timers and pulls entries over its API. When it’s offline, Praxis falls back to local time entries.'),
+    el('div', { class: 'row', style: 'align-items:flex-end' },
+      el('label', { class: 'field grow', style: 'margin:0' }, el('span', {}, 'TheWatcher URL'), urlInput),
+      el('button', { class: 'btn primary', onclick: async () => { await api.post('/watcher/config', { url: urlInput.value }); toast('Saved. Reconnecting…'); render(); } }, 'Save & connect')),
+  );
+
+  // Start-timer card (only useful when connected)
+  const matterSel = el('select', {}, el('option', { value: '' }, '— no matter (free-form) —'), ...matters.map((m) => el('option', { value: m.id }, `${m.reference || m.id} · ${m.title}`)));
+  const desc = el('input', { placeholder: 'What are you working on?' });
+  const att = el('input', { placeholder: 'Attorney' });
+  const rate = el('input', { type: 'number', placeholder: 'Rate/hr', style: 'max-width:120px' });
+  const startBtn = el('button', { class: 'btn primary', disabled: st.connected ? null : '' }, '▶ Start timer');
+  startBtn.addEventListener('click', async () => {
+    startBtn.disabled = true;
+    try { await api.post('/watcher/timers/start', { matterId: matterSel.value, description: desc.value, attorney: att.value, rate: Number(rate.value) || 0 }); desc.value = ''; toast('Timer started.'); render(); }
+    catch (e) { toast('Error: ' + e.message); startBtn.disabled = false; }
+  });
+  const startCard = el('div', { class: 'card' },
+    el('h3', {}, 'Start a timer'),
+    st.connected ? null : el('p', { class: 'muted' }, 'Connect TheWatcher above to start timers.'),
+    el('label', { class: 'field' }, el('span', {}, 'Matter'), matterSel),
+    el('label', { class: 'field' }, el('span', {}, 'Description'), desc),
+    el('div', { class: 'row' }, el('label', { class: 'field grow' }, el('span', {}, 'Attorney'), att), el('label', { class: 'field' }, el('span', {}, 'Rate'), rate)),
+    el('div', { class: 'btn-row' }, startBtn),
+  );
+
+  const running = el('div', { class: 'card', id: 'running-timers' });
+  const entriesCard = el('div', { class: 'card', id: 'time-entries' });
+  const refresh = async () => { await renderRunningTimers(running); await renderTimeEntries(entriesCard); };
+  await refresh();
+  // Live tick while on this view: update running timers + entries every 5s.
+  if (st.connected) state._tick = setInterval(() => { tickElapsed(); }, 1000), state._poll = setInterval(refresh, 5000);
+
+  return el('div', {}, el('h2', {}, '⏱️ Time & Billing'),
+    el('div', { class: 'grid-2' }, connCard, startCard),
+    running, entriesCard);
+};
+
+function fmtElapsed(s) { s = Math.max(0, Math.floor(s)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60; return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`; }
+function tickElapsed() { document.querySelectorAll('[data-started]').forEach((n) => { const s = (Date.now() - new Date(n.dataset.started)) / 1000; n.textContent = fmtElapsed(s); }); }
+
+async function renderRunningTimers(card) {
+  const res = await api.get('/watcher/timers').catch(() => ({ connected: false, timers: [] }));
+  card.innerHTML = '';
+  card.append(el('h3', {}, `Running timers (${res.timers?.length || 0})`));
+  if (!res.connected) { card.append(el('div', { class: 'empty' }, 'TheWatcher not connected.')); return; }
+  if (!res.timers.length) { card.append(el('div', { class: 'empty' }, 'No timers running.')); return; }
+  card.append(table(['Elapsed', 'Matter / label', 'Attorney', 'Description', ''], res.timers.map((t) => [
+    el('span', { 'data-started': t.startedAt, style: 'font-family:monospace;color:var(--accent)' }, fmtElapsed(t.elapsedSeconds)),
+    t.matterRef ? `${t.matterRef} · ${t.label}` : t.label, t.attorney || '—', t.description || '—',
+    el('button', { class: 'btn danger', onclick: async () => { try { const out = await api.post(`/watcher/timers/${t.id}/stop`, {}); toast(`Logged ${out.entry?.minutes || 0} min.`); render(); } catch (e) { toast('Error: ' + e.message); } } }, '■ Stop'),
+  ])));
+}
+
+async function renderTimeEntries(card) {
+  const res = await api.get('/watcher/entries').catch(() => ({ source: 'local', entries: [] }));
+  const matters = {}; (await api.get('/matters')).forEach((m) => (matters[m.id] = m.reference || m.title));
+  card.innerHTML = '';
+  let totalMin = 0, totalAmt = 0;
+  for (const e of res.entries) { totalMin += e.minutes || 0; totalAmt += ((e.minutes || 0) / 60) * (e.rate || 0); }
+  card.append(el('div', { class: 'section-head' }, el('h3', { style: 'margin:0' }, 'Time entries'),
+    el('span', { class: 'muted', style: 'font-size:13px' }, `source: ${res.source}${res.watcherError ? ` (TheWatcher: ${res.watcherError})` : ''}`)));
+  if (!res.entries.length) { card.append(el('div', { class: 'empty' }, 'No time entries yet.')); return; }
+  card.append(table(['Date', 'Matter', 'Attorney', 'Description', 'Min', 'Rate', 'Amount'], res.entries.map((e) => [
+    (e.endedAt || e.date || '').slice(0, 10) || '—', matters[e.matterId] || e.matterRef || '—', e.attorney || '—', e.description || '—',
+    String(e.minutes || 0), e.rate ? '$' + e.rate : '—', e.rate ? '$' + (((e.minutes || 0) / 60) * e.rate).toFixed(2) : '—',
+  ])));
+  card.append(el('div', { style: 'text-align:right;margin-top:10px;font-weight:600' }, `Total: ${(totalMin / 60).toFixed(2)} h${totalAmt ? ` · $${totalAmt.toFixed(2)}` : ''}`));
+}
+
 views.activity = async () => {
   const log = await api.get('/activity');
   return el('div', {}, el('h2', {}, '🕘 Activity Log'),
@@ -396,9 +479,11 @@ async function sendChat(e) {
 // --- shell ------------------------------------------------------------------
 function setNav() {
   document.querySelectorAll('.nav-btn').forEach((b) => b.classList.toggle('active', b.dataset.view === state.view));
-  $('#crumb').textContent = { dashboard: 'Dashboard', matters: 'Matters', drafting: 'Drafting', docket: 'Docket & Deadlines', intake: 'Intake', activity: 'Activity' }[state.view] || state.view;
+  $('#crumb').textContent = { dashboard: 'Dashboard', matters: 'Matters', drafting: 'Drafting', docket: 'Docket & Deadlines', intake: 'Intake', time: 'Time & Billing', activity: 'Activity' }[state.view] || state.view;
 }
 async function render() {
+  if (state._tick) { clearInterval(state._tick); state._tick = null; }
+  if (state._poll) { clearInterval(state._poll); state._poll = null; }
   setNav();
   const host = $('#view');
   host.innerHTML = '';

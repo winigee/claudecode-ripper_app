@@ -45,6 +45,33 @@ Four core modules, plus the BonesAI assistant woven through every screen:
   is on. The replacement map is held in memory only, never persisted.
 - `agents.js` — the four agents and the matter-aware assistant prompt.
 
+## TheWatcher integration (timekeeper)
+
+TheWatcher is a **separate, independent timekeeper app** (its own repo). Praxis
+works with it but never depends on it. The coupling is a single documented HTTP
+contract — see [`INTEGRATION.md`](./INTEGRATION.md).
+
+- **Connected:** the **⏱️ Time** tab and the matter "Start timer" button drive
+  timers in TheWatcher and pull its entries into billing. Stopped entries are
+  mirrored locally so billing survives if the timekeeper later goes offline.
+- **Not connected:** Praxis falls back to its own local time entries and keeps
+  working. TheWatcher, likewise, runs fully standalone.
+
+Configure the URL in the Time tab, or via `THEWATCHER_URL`. To see it working
+before the real TheWatcher exists, run the reference mock alongside Praxis:
+
+```sh
+# terminal 1 — reference timekeeper (implements the v1 contract)
+node server/integrations/thewatcher-mock.js          # → http://localhost:4400
+
+# terminal 2 — Praxis, pointed at it
+THEWATCHER_URL=http://localhost:4400 node server/index.js
+```
+
+> Hand `INTEGRATION.md` to the TheWatcher project so it implements the matching
+> endpoints. The mock under `server/integrations/thewatcher-mock.js` is a
+> reference stub, **not** the real TheWatcher.
+
 ## Architecture
 
 ```
@@ -55,6 +82,10 @@ suite/
     seed.js         demo firm data on first boot
     ai/             ← the BonesAI engine
       redact.js  claude.js  bones.js  agents.js
+    integrations/
+      thewatcher.js       Praxis-side connector to the timekeeper
+      thewatcher-mock.js  reference stub implementing the v1 contract
+  INTEGRATION.md    Praxis ⇄ TheWatcher API contract
   web/
     index.html  app.js  styles.css   single-page UI, no framework
   data/             db.json (gitignored, created at runtime)

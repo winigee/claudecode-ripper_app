@@ -11,6 +11,26 @@ const db = require('./db');
 const { seed } = require('./seed');
 const agents = require('./ai/agents');
 const bones = require('./ai/bones');
+const watcher = require('./integrations/thewatcher');
+
+// Resolve TheWatcher's URL: runtime setting wins, then env, then unset.
+function watcherUrl() {
+  return db.getSetting('thewatcherUrl', process.env.THEWATCHER_URL || '') || '';
+}
+// Mirror a TheWatcher entry into the local store so billing survives if the
+// timekeeper later goes offline. Deduped on the external id.
+function mirrorEntry(entry) {
+  if (!entry) return null;
+  const extId = entry.id;
+  const existing = extId && db.where('timeEntries', (t) => t.externalId === extId)[0];
+  const row = {
+    matterId: entry.matterId || null, attorney: entry.attorney || '',
+    description: entry.description || '', minutes: entry.minutes || 0,
+    rate: entry.rate || 0, date: (entry.endedAt || entry.date || new Date().toISOString()).slice(0, 10),
+    source: 'thewatcher', externalId: extId, billable: entry.billable !== false,
+  };
+  return existing ? db.update('timeEntries', existing.id, row) : db.insert('timeEntries', row);
+}
 
 const PORT = process.env.PORT || 4317;
 const WEB_DIR = path.join(__dirname, '..', 'web');
@@ -213,6 +233,66 @@ async function api(req, res, pathname, query) {
   // Activity log
   if (r[0] === 'activity' && method === 'GET') return sendJson(res, 200, db.all('activity').slice(-100).reverse());
 
+  // --- TheWatcher (timekeeper) integration ---
+  if (r[0] === 'watcher') {
+    const base = watcherUrl();
+    // Config: get/set the TheWatcher URL at runtime.
+    if (r[1] === 'config' && method === 'GET') return sendJson(res, 200, { url: base, fromEnv: !!process.env.THEWATCHER_URL });
+    if (r[1] === 'config' && method === 'POST') { const b = await readBody(req); db.setSetting('thewatcherUrl', (b.url || '').trim()); return sendJson(res, 200, { url: watcherUrl() }); }
+
+    // Status / health.
+    if (r[1] === 'status' && method === 'GET') return sendJson(res, 200, await watcher.status(base));
+
+    // Live timers (running). Empty list if not connected.
+    if (r[1] === 'timers' && !r[2] && method === 'GET') {
+      try { return sendJson(res, 200, { connected: true, timers: await watcher.listTimers(base) }); }
+      catch (e) { return sendJson(res, 200, { connected: false, timers: [], error: e.code || e.message }); }
+    }
+    // Start a timer for a matter.
+    if (r[1] === 'timers' && r[2] === 'start' && method === 'POST') {
+      const b = await readBody(req);
+      const m = b.matterId ? db.get('matters', b.matterId) : null;
+      const payload = {
+        matterId: b.matterId || null,
+        matterRef: m?.reference || b.matterRef || null,
+        label: m?.title || b.label || 'Untitled',
+        attorney: b.attorney || m?.responsibleAttorney || '',
+        description: b.description || '',
+        rate: b.rate || 0,
+      };
+      try {
+        const t = await watcher.startTimer(base, payload);
+        db.logActivity({ actor: 'user', action: 'started-timer', matterId: payload.matterId, detail: `${payload.label} (TheWatcher)` });
+        return sendJson(res, 200, t);
+      } catch (e) { return sendJson(res, 502, { error: e.message, code: e.code }); }
+    }
+    // Stop a timer → mirror the resulting entry locally for billing.
+    if (r[1] === 'timers' && r[2] && r[3] === 'stop' && method === 'POST') {
+      try {
+        const out = await watcher.stopTimer(base, r[2]);
+        const mirrored = mirrorEntry(out.entry);
+        db.logActivity({ actor: 'user', action: 'stopped-timer', matterId: out.entry?.matterId, detail: `${out.entry?.minutes || 0} min logged (TheWatcher)` });
+        return sendJson(res, 200, { ...out, mirrored });
+      } catch (e) { return sendJson(res, 502, { error: e.message, code: e.code }); }
+    }
+    // Entries: prefer TheWatcher (live), fall back to local mirror/manual entries.
+    if (r[1] === 'entries' && method === 'GET') {
+      try {
+        const live = await watcher.listEntries(base, { matterId: query.matterId });
+        return sendJson(res, 200, { source: 'thewatcher', entries: live });
+      } catch (e) {
+        const local = query.matterId ? db.where('timeEntries', (t) => t.matterId === query.matterId) : db.all('timeEntries');
+        return sendJson(res, 200, { source: 'local', entries: local, watcherError: e.code || e.message });
+      }
+    }
+    // Webhook: TheWatcher → Praxis live push.
+    if (r[1] === 'events' && method === 'POST') {
+      const b = await readBody(req);
+      if (b.type === 'entry.created' && b.entry) { mirrorEntry(b.entry); db.logActivity({ actor: 'thewatcher', action: 'entry.created', matterId: b.entry.matterId, detail: `${b.entry.minutes || 0} min` }); }
+      return sendJson(res, 200, { ok: true });
+    }
+  }
+
   // --- AI agent endpoints ---
   if (r[0] === 'ai') {
     if (r[1] === 'draft' && method === 'POST') {
@@ -253,5 +333,6 @@ seed();
 server.listen(PORT, () => {
   console.log(`\n  Praxis — AI practice management suite`);
   console.log(`  http://localhost:${PORT}`);
-  console.log(`  BonesAI engine: ${bones.available() ? 'ONLINE (Anthropic key detected)' : 'OFFLINE (set ANTHROPIC_API_KEY for live agents)'}\n`);
+  console.log(`  BonesAI engine: ${bones.available() ? 'ONLINE (Anthropic key detected)' : 'OFFLINE (set ANTHROPIC_API_KEY for live agents)'}`);
+  console.log(`  TheWatcher:     ${watcherUrl() ? watcherUrl() + ' (configured)' : 'not configured (set THEWATCHER_URL or connect in the Time tab)'}\n`);
 });

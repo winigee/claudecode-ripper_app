@@ -109,6 +109,20 @@ function logActivity(entry) {
   return insert('activity', { ts: new Date().toISOString(), ...entry });
 }
 
+// Small key/value settings bag in _meta (e.g. configured TheWatcher URL).
+function getSetting(key, def = null) {
+  load();
+  if (!db._meta.settings) db._meta.settings = {};
+  return key in db._meta.settings ? db._meta.settings[key] : def;
+}
+function setSetting(key, val) {
+  load();
+  if (!db._meta.settings) db._meta.settings = {};
+  db._meta.settings[key] = val;
+  scheduleFlush();
+  return val;
+}
+
 function reset() {
   db = emptyDb();
   flush();
@@ -119,4 +133,5 @@ module.exports = {
   COLLECTIONS, DATA_DIR, DB_FILE,
   load, flush, reset, id,
   all, get, where, insert, update, remove, logActivity,
+  getSetting, setSetting,
 };
