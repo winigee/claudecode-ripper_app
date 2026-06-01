@@ -1,4 +1,4 @@
-// Praxis server — zero-dependency Node HTTP. Serves the SPA from web/ and a
+// Praixis server — zero-dependency Node HTTP. Serves the SPA from web/ and a
 // small REST + SSE API under /api. The BonesAI engine (ai/) powers drafting,
 // docket extraction, intake triage, and the embedded assistant.
 
@@ -285,7 +285,7 @@ async function api(req, res, pathname, query) {
         return sendJson(res, 200, { source: 'local', entries: local, watcherError: e.code || e.message });
       }
     }
-    // Webhook: TheWatcher → Praxis live push.
+    // Webhook: TheWatcher → Praixis live push.
     if (r[1] === 'events' && method === 'POST') {
       const b = await readBody(req);
       if (b.type === 'entry.created' && b.entry) { mirrorEntry(b.entry); db.logActivity({ actor: 'thewatcher', action: 'entry.created', matterId: b.entry.matterId, detail: `${b.entry.minutes || 0} min` }); }
@@ -331,7 +331,7 @@ const server = http.createServer((req, res) => {
 db.load();
 seed();
 server.listen(PORT, () => {
-  console.log(`\n  Praxis — AI practice management suite`);
+  console.log(`\n  Praixis — AI practice management suite`);
   console.log(`  http://localhost:${PORT}`);
   console.log(`  BonesAI engine: ${bones.available() ? 'ONLINE (Anthropic key detected)' : 'OFFLINE (set ANTHROPIC_API_KEY for live agents)'}`);
   console.log(`  TheWatcher:     ${watcherUrl() ? watcherUrl() + ' (configured)' : 'not configured (set THEWATCHER_URL or connect in the Time tab)'}\n`);

@@ -1,19 +1,19 @@
-# Praxis ⇄ TheWatcher — Integration Contract (v1)
+# Praixis ⇄ TheWatcher — Integration Contract (v1)
 
 This is the **shared API contract** between two independent applications:
 
-- **Praxis** — the practice management suite (this repo).
+- **Praixis** — the practice management suite (this repo).
 - **TheWatcher** — a standalone timekeeper (separate repo, built independently).
 
 Neither app depends on the other to function. When a TheWatcher URL is
-configured in Praxis, Praxis becomes a **client** of TheWatcher's API: it can
+configured in Praixis, Praixis becomes a **client** of TheWatcher's API: it can
 start/stop timers against a matter and pull time entries into billing. When
-TheWatcher is unreachable, Praxis falls back to its own local time entries and
+TheWatcher is unreachable, Praixis falls back to its own local time entries and
 keeps working.
 
 > **For the TheWatcher developer:** implement the endpoints under
 > "TheWatcher MUST implement" below and TheWatcher will plug straight into
-> Praxis. Everything else (your own UI, storage, auth) is yours to design.
+> Praixis. Everything else (your own UI, storage, auth) is yours to design.
 
 ---
 
@@ -21,9 +21,9 @@ keeps working.
 
 - REST over HTTP, JSON bodies, UTF-8.
 - Dev default URL for TheWatcher: `http://localhost:4400`.
-- Praxis identifies a matter with three fields, all optional from TheWatcher's
+- Praixis identifies a matter with three fields, all optional from TheWatcher's
   point of view (it stores them opaquely and never needs to resolve them):
-  - `matterId`  — Praxis internal id, e.g. `mat_0001`
+  - `matterId`  — Praixis internal id, e.g. `mat_0001`
   - `matterRef` — human reference, e.g. `M-100231`
   - `label`     — matter title, e.g. `Acme Robotics v. Nexus Components`
 - TheWatcher can also be used with no matter at all (free-form `label` only),
@@ -34,7 +34,7 @@ keeps working.
 ## TheWatcher MUST implement
 
 ### `GET /health`
-Liveness + identity. Praxis polls this to show connection status.
+Liveness + identity. Praixis polls this to show connection status.
 ```json
 200 → { "service": "thewatcher", "status": "ok", "version": "1.0.0" }
 ```
@@ -87,18 +87,18 @@ body → { "matterId": "...", "matterRef": "...", "attorney": "...",
 
 ---
 
-## Optional — live push (TheWatcher → Praxis)
+## Optional — live push (TheWatcher → Praixis)
 
-If TheWatcher wants Praxis to react the moment time is logged (instead of
-Praxis polling), it MAY POST to a Praxis webhook. Praxis also works fine
+If TheWatcher wants Praixis to react the moment time is logged (instead of
+Praixis polling), it MAY POST to a Praixis webhook. Praixis also works fine
 without this by polling `GET /api/entries`.
 
-### `POST {praxisUrl}/api/watcher/events`  (implemented by Praxis)
+### `POST {praixisUrl}/api/watcher/events`  (implemented by Praixis)
 ```json
 body → { "type": "entry.created", "entry": { ...entry shape } }
 200  → { "ok": true }
 ```
-On receipt Praxis mirrors the entry into its local store for billing
+On receipt Praixis mirrors the entry into its local store for billing
 resilience and logs it to the activity feed.
 
 ---
@@ -107,8 +107,8 @@ resilience and logs it to the activity feed.
 
 | | Runs standalone | When paired |
 | --- | --- | --- |
-| **TheWatcher** | Yes — own UI, tracks time against labels or matter ids. | Praxis drives start/stop and reads entries via the API above. |
-| **Praxis** | Yes — local `timeEntries` collection, manual entry. | Surfaces TheWatcher timers/entries; mirrors stopped entries locally for billing. |
+| **TheWatcher** | Yes — own UI, tracks time against labels or matter ids. | Praixis drives start/stop and reads entries via the API above. |
+| **Praixis** | Yes — local `timeEntries` collection, manual entry. | Surfaces TheWatcher timers/entries; mirrors stopped entries locally for billing. |
 
 No shared database, no shared code, no startup-order dependency. The contract
 above is the only coupling.

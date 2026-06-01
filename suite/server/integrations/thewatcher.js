@@ -1,9 +1,9 @@
-// Praxis → TheWatcher connector.
+// Praixis → TheWatcher connector.
 //
-// TheWatcher is an independent timekeeper service (separate repo). Praxis is a
+// TheWatcher is an independent timekeeper service (separate repo). Praixis is a
 // client of its API — see ../../INTEGRATION.md for the contract. Every call is
 // time-boxed and failure-tolerant: if TheWatcher is unreachable, callers get a
-// clear { connected:false } / thrown error and Praxis falls back to local time
+// clear { connected:false } / thrown error and Praixis falls back to local time
 // entries. Nothing here assumes TheWatcher is running.
 
 const DEFAULT_TIMEOUT = 2500;

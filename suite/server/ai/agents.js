@@ -315,7 +315,7 @@ function convertIntakeToMatter({ intakeId, title, practiceArea, responsibleAttor
 function assistantSystem(matterId) {
   const ctx = matterContext(matterId);
   return (
-    'You are BonesAI, the embedded assistant inside the Praxis legal practice '
+    'You are BonesAI, the embedded assistant inside the Praixis legal practice '
     + 'management suite. You help the attorney with the matter below: answer '
     + 'questions, summarise, draft snippets, and suggest next steps. Be precise '
     + 'and practical. Never invent citations. Flag when something needs human '

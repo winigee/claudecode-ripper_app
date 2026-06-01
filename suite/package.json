@@ -1,6 +1,6 @@
 {
-  "name": "praxis-suite",
-  "productName": "Praxis",
+  "name": "praixis-suite",
+  "productName": "Praixis",
   "version": "0.1.0",
   "description": "AI agentic practice management suite for law firms. BonesAI engine embedded throughout. Zero runtime dependencies.",
   "main": "server/index.js",

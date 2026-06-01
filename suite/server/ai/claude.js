@@ -1,5 +1,5 @@
 // Anthropic API client — the network-reaching half of the BonesAI engine.
-// Reads the key from ANTHROPIC_API_KEY (or PRAXIS_ANTHROPIC_KEY). When no key
+// Reads the key from ANTHROPIC_API_KEY (or PRAIXIS_ANTHROPIC_KEY). When no key
 // is configured, callers fall back to deterministic stubs so the prototype is
 // fully demonstrable offline — see ai/agents.js.
 
@@ -14,7 +14,7 @@ const MODELS = {
 const DEFAULT_MODEL = MODELS.sonnet;
 
 function apiKey() {
-  return (process.env.ANTHROPIC_API_KEY || process.env.PRAXIS_ANTHROPIC_KEY || '').trim();
+  return (process.env.ANTHROPIC_API_KEY || process.env.PRAIXIS_ANTHROPIC_KEY || '').trim();
 }
 function available() {
   return !!apiKey();

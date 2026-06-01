@@ -1,4 +1,4 @@
-// Praxis front-end — vanilla JS SPA. No build step.
+// Praixis front-end — vanilla JS SPA. No build step.
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const el = (tag, props = {}, ...kids) => {
@@ -262,7 +262,7 @@ views.time = async () => {
     st.connected ? `connected · ${st.service || 'thewatcher'} ${st.version || ''}` : st.configured ? `unreachable (${st.error || '—'})` : 'not configured');
   const connCard = el('div', { class: 'card' },
     el('div', { class: 'section-head' }, el('h3', { style: 'margin:0' }, 'TheWatcher connection'), connDot),
-    el('p', { class: 'muted', style: 'font-size:13px' }, 'TheWatcher is an independent timekeeper. Praxis drives timers and pulls entries over its API. When it’s offline, Praxis falls back to local time entries.'),
+    el('p', { class: 'muted', style: 'font-size:13px' }, 'TheWatcher is an independent timekeeper. Praixis drives timers and pulls entries over its API. When it’s offline, Praixis falls back to local time entries.'),
     el('div', { class: 'row', style: 'align-items:flex-end' },
       el('label', { class: 'field grow', style: 'margin:0' }, el('span', {}, 'TheWatcher URL'), urlInput),
       el('button', { class: 'btn primary', onclick: async () => { await api.post('/watcher/config', { url: urlInput.value }); toast('Saved. Reconnecting…'); render(); } }, 'Save & connect')),

@@ -1,12 +1,12 @@
 // Reference mock of TheWatcher's API — NOT the real TheWatcher.
 //
 // A tiny in-memory stand-in that implements the v1 contract (../../INTEGRATION.md)
-// so the Praxis Time tab is demonstrable before the real timekeeper exists, and
+// so the Praixis Time tab is demonstrable before the real timekeeper exists, and
 // so the contract has an executable reference. Run it on its own port:
 //
 //   node server/integrations/thewatcher-mock.js        # → http://localhost:4400
 //
-// Then point Praxis at it (Time tab → connect, or THEWATCHER_URL=http://localhost:4400).
+// Then point Praixis at it (Time tab → connect, or THEWATCHER_URL=http://localhost:4400).
 
 const http = require('http');
 const url = require('url');
