@@ -161,6 +161,13 @@
     brainAdd: (note) => POST('/api/brain', note),
     brainDelete: (id) => DELETE('/api/brain/' + encodeURIComponent(id)),
 
+    // Shared memory — host only for now (lives on the host filesystem / iCloud)
+    memoryList: async () => [],
+    memoryAdd: async () => ({ error: 'host only' }),
+    memoryDelete: async () => ({ ok: false }),
+    memoryConfig: async () => ({ error: 'host only' }),
+    memorySetICloud: async () => ({ error: 'host only' }),
+
     // Chat
     chatList: () => GET('/api/chats'),
     chatLoad: (id) => GET('/api/chats/' + encodeURIComponent(id)),

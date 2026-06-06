@@ -55,6 +55,13 @@ contextBridge.exposeInMainWorld('bones', {
   brainAdd: (note) => ipcRenderer.invoke('brain:add', note),
   brainDelete: (id) => ipcRenderer.invoke('brain:delete', id),
 
+  // Shared memory
+  memoryList: () => ipcRenderer.invoke('memory:list'),
+  memoryAdd: (text) => ipcRenderer.invoke('memory:add', text),
+  memoryDelete: (id) => ipcRenderer.invoke('memory:delete', id),
+  memoryConfig: () => ipcRenderer.invoke('memory:config'),
+  memorySetICloud: (on) => ipcRenderer.invoke('memory:set-icloud', on),
+
   // Chat
   chatList: () => ipcRenderer.invoke('chat:list'),
   chatLoad: (id) => ipcRenderer.invoke('chat:load', id),

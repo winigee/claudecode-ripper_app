@@ -1,4 +1,5 @@
 const llamaServer = require('./llama-server');
+const memory = require('./memory');
 
 const SUMMARY_SYSTEM = `You are BonesAI, a careful research assistant running locally on the user's Mac.
 
@@ -141,7 +142,15 @@ async function chat({ messages }, { onToken, signal } = {}) {
   const port = llamaServer.getPort();
   if (!port) throw new Error('llama-server is not running.');
 
-  const wireMessages = [{ role: 'system', content: CHAT_SYSTEM }, ...messages];
+  // Inject shared memory so every local model benefits from what the user has
+  // taught any other model. This runs entirely on-device.
+  let system = CHAT_SYSTEM;
+  const mem = memory.injectionText(4000);
+  if (mem) {
+    system += `\n\nThe user has taught you the following. Treat these as standing facts and instructions, and apply them unless the user says otherwise:\n${mem}`;
+  }
+
+  const wireMessages = [{ role: 'system', content: system }, ...messages];
 
   const resp = await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, {
     method: 'POST',

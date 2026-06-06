@@ -773,6 +773,34 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   color: var(--text);
 }
 
+/* --- Shared memory --- */
+.memory-add-row { gap: 8px; }
+.memory-add-row #memory-input { flex: 1; min-width: 0; }
+.memory-list { margin: 10px 0 4px; display: flex; flex-direction: column; gap: 6px; }
+.memory-item {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--bg-3);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 8px 10px;
+}
+.memory-text { font-size: 12.5px; line-height: 1.45; color: var(--text); }
+.memory-del {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0 4px;
+  min-height: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.memory-del:hover { color: var(--err); }
+
 /* --- Mobile-only chrome (hidden on desktop) --- */
 .sidebar-toggle, .mobile-topbar, .bottom-nav { display: none; }
 

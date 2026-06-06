@@ -195,6 +195,21 @@
       <section id="tab-settings" class="tab-panel">
         <h2>Settings</h2>
 
+        <div class="setting" id="setting-memory">
+          <label>Memory <span class="muted" style="text-transform:none;letter-spacing:0;font-size:11px">— shared across every local model</span></label>
+          <p class="hint">Teach Bones facts, preferences, or standing instructions. These are added to every local model’s context, so whatever you teach one model, they all remember. (Local models only — not sent to Claude.)</p>
+          <div class="row memory-add-row">
+            <input id="memory-input" type="text" placeholder="e.g. I practise UK employment law. Always use British spelling." />
+            <button id="btn-memory-add" class="primary">Teach</button>
+          </div>
+          <div id="memory-list" class="memory-list"></div>
+          <label class="search-opt" style="margin-top:10px">
+            <input type="checkbox" id="memory-icloud" />
+            Store memory in iCloud Drive (sync across all your Macs)
+          </label>
+          <p class="hint" id="memory-location"></p>
+        </div>
+
         <div class="setting">
           <label>Local model</label>
           <p class="hint" id="model-state">Checking…</p>
@@ -267,17 +282,16 @@
         </div>
 
         <div class="setting">
-          <label>About BonesAI v2.6.0</label>
+          <label>About BonesAI v2.7.0</label>
           <p class="hint">
             <strong>Local-first.</strong> Inference, search, and redaction all run on this Mac via
             llamafile + a local model. The one exception is “Send to Claude”, which reaches the
             Anthropic API on purpose — and only ever with material you have redacted first.
           </p>
           <p class="hint">
-            v2.6.0 adds a tunable context window in Settings → Performance, and bumps the
-            default to 16K on Macs with ≥16 GB RAM so long documents fit without manual
-            steps. v2.5.0 made BonesAI installable on iPhone as a PWA — open the URL in
-            Safari, Share → Add to Home Screen, and it runs fullscreen.
+            v2.7.0 adds shared Memory (teach Bones once, every local model remembers — optionally
+            synced across your Macs via iCloud) and the SaulLM legal model in the model picker.
+            v2.6.0 added a tunable context window. v2.5.0 made BonesAI installable on iPhone as a PWA.
           </p>
           <p class="hint">
             v2.2.0 added Network sharing — open BonesAI in a browser on other devices on the same

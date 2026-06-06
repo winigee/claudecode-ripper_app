@@ -11,6 +11,7 @@ const docsearch = require('./docsearch');
 const redact = require('./redact');
 const prompts = require('./prompts');
 const claudeApi = require('./claude-api');
+const memory = require('./memory');
 const brain = require('./brain');
 const chats = require('./chats');
 const webServer = require('./web-server');
@@ -379,6 +380,13 @@ ipcMain.handle('web:set-share', async (_e, share) => {
   return webServer.info();
 });
 ipcMain.handle('web:regen-token', () => webServer.regenerateToken());
+
+// --- Shared memory ---
+ipcMain.handle('memory:list', () => memory.list());
+ipcMain.handle('memory:add', (_e, text) => memory.add(text));
+ipcMain.handle('memory:delete', (_e, id) => memory.remove(id));
+ipcMain.handle('memory:config', () => memory.getConfig());
+ipcMain.handle('memory:set-icloud', (_e, on) => memory.setICloud(on));
 
 ipcMain.handle('brain:list', () => brain.listNotes());
 ipcMain.handle('brain:add', (_e, note) => brain.addNote(note || {}));

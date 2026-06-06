@@ -33,6 +33,18 @@ const MODELS = [
     notes: 'Balanced quality. Sweet spot on 16 GB Macs.',
   },
   {
+    id: 'saul-7b',
+    name: 'SaulLM 7B Instruct (legal)',
+    short: 'saul-7b',
+    sizeLabel: '4.4 GB',
+    filename: 'Saul-7B-Instruct-v1.Q4_K_M.gguf',
+    url: 'https://huggingface.co/MaziyarPanahi/Saul-7B-Instruct-v1-GGUF/resolve/main/Saul-7B-Instruct-v1.Q4_K_M.gguf',
+    bytes: 4368439584,
+    minBytes: 4_000_000_000,
+    minRamGB: 10,
+    notes: 'Legal-domain model (Mistral-7B base, trained on contracts/case law/statutes). Fluent in legalese. Verify output — local models still hallucinate citations.',
+  },
+  {
     id: 'qwen-14b',
     name: 'Qwen2.5 14B Instruct',
     short: 'qwen-14b',

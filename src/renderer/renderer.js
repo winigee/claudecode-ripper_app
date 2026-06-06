@@ -953,6 +953,74 @@ async function refreshSettings() {
   refreshSharing();
   refreshApiSettings();
   refreshPerformance();
+  refreshMemory();
+}
+
+async function refreshMemory() {
+  if (!window.bones.memoryConfig) return;
+  let cfg;
+  try { cfg = await window.bones.memoryConfig(); } catch (_) { cfg = { error: 'host only' }; }
+  const sec = $('#setting-memory');
+  if (cfg && cfg.error) {
+    if (sec) sec.style.display = 'none';
+    return;
+  }
+  if (sec) sec.style.display = '';
+  const entries = await window.bones.memoryList();
+  const list = $('#memory-list');
+  if (!entries || entries.length === 0) {
+    list.innerHTML = '<div class="muted" style="font-size:12px">Nothing taught yet.</div>';
+  } else {
+    list.innerHTML = '';
+    for (const e of entries.slice().reverse()) {
+      const row = document.createElement('div');
+      row.className = 'memory-item';
+      row.innerHTML = `<span class="memory-text"></span><button class="memory-del" data-id="${e.id}" title="Forget">×</button>`;
+      row.querySelector('.memory-text').textContent = e.text;
+      list.appendChild(row);
+    }
+    $$('.memory-del').forEach((b) =>
+      b.addEventListener('click', async () => {
+        await window.bones.memoryDelete(b.dataset.id);
+        refreshMemory();
+      })
+    );
+  }
+  $('#memory-icloud').checked = !!cfg.icloud;
+  $('#memory-icloud').disabled = !cfg.icloudAvailable && !cfg.icloud;
+  const loc = $('#memory-location');
+  if (cfg.icloud) {
+    loc.innerHTML = `Synced via iCloud · ${entries.length} item(s). <span class="muted">${escapeHtml(cfg.path)}</span>`;
+  } else if (cfg.icloudAvailable) {
+    loc.innerHTML = `Stored locally on this Mac · ${entries.length} item(s). <span class="muted">Tick the box to sync across your Macs.</span>`;
+  } else {
+    loc.innerHTML = `Stored locally · ${entries.length} item(s). <span class="muted">iCloud Drive not detected on this Mac.</span>`;
+  }
+}
+
+async function addMemory() {
+  const input = $('#memory-input');
+  const text = input.value.trim();
+  if (!text) return;
+  await window.bones.memoryAdd(text);
+  input.value = '';
+  setStatus('taught Bones', 'ok');
+  refreshMemory();
+}
+
+if (document.getElementById('memory-input')) {
+  $('#btn-memory-add').addEventListener('click', addMemory);
+  $('#memory-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); addMemory(); }
+  });
+  $('#memory-icloud').addEventListener('change', async (e) => {
+    const res = await window.bones.memorySetICloud(e.target.checked);
+    if (res && res.error) {
+      alert(res.error);
+      e.target.checked = !e.target.checked;
+    }
+    refreshMemory();
+  });
 }
 
 async function refreshPerformance() {
