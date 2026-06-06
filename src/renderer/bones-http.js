@@ -187,6 +187,19 @@
     chatSave: (chat) => POST('/api/chats', chat),
     chatDelete: (id) => DELETE('/api/chats/' + encodeURIComponent(id)),
     chatRename: async () => ({ ok: false }), // not exposed over web in v2.2.0
+    chatSearch: async (q) => {
+      // Client-side filter over the chat list we can fetch; good enough on web.
+      try {
+        const all = await GET('/api/chats');
+        const ql = String(q || '').toLowerCase();
+        return ql ? all.filter((c) => (c.title || '').toLowerCase().includes(ql)) : all;
+      } catch (_) { return []; }
+    },
+    chatSetProject: async () => ({ error: 'host only' }),
+    projectsList: async () => [],
+    projectsAdd: async () => ({ error: 'host only' }),
+    projectsRename: async () => ({ error: 'host only' }),
+    projectsDelete: async () => ({ ok: false }),
     chatStream: (payload, runId) => {
       const { promise, cancel } = streamChat(payload, (delta) => {
         for (const cb of tokenListeners) cb({ runId, delta });

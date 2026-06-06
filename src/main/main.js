@@ -16,6 +16,7 @@ const absorb = require('./absorb');
 const promptEngine = require('./prompt-engine');
 const brain = require('./brain');
 const chats = require('./chats');
+const projects = require('./projects');
 const webServer = require('./web-server');
 
 let mainWindow = null;
@@ -486,10 +487,18 @@ ipcMain.handle('brain:delete', (_e, id) => ({ ok: brain.deleteNote(id) }));
 // --- Chat ---
 
 ipcMain.handle('chat:list', () => chats.list());
+ipcMain.handle('chat:search', (_e, query) => chats.search(query));
 ipcMain.handle('chat:load', (_e, id) => chats.load(id));
 ipcMain.handle('chat:save', (_e, chat) => chats.save(chat || {}));
 ipcMain.handle('chat:delete', (_e, id) => ({ ok: chats.remove(id) }));
 ipcMain.handle('chat:rename', (_e, { id, title }) => chats.rename(id, title));
+ipcMain.handle('chat:set-project', (_e, { id, projectId }) => chats.setProject(id, projectId));
+
+// --- Projects ---
+ipcMain.handle('projects:list', () => projects.list());
+ipcMain.handle('projects:add', (_e, name) => projects.add(name));
+ipcMain.handle('projects:rename', (_e, { id, name }) => projects.rename(id, name));
+ipcMain.handle('projects:delete', (_e, id) => projects.remove(id));
 
 ipcMain.handle('llama:chat', async (event, payload, runId) => {
   const ctrl = new AbortController();

@@ -81,7 +81,15 @@ contextBridge.exposeInMainWorld('bones', {
   chatSave: (chat) => ipcRenderer.invoke('chat:save', chat),
   chatDelete: (id) => ipcRenderer.invoke('chat:delete', id),
   chatRename: (id, title) => ipcRenderer.invoke('chat:rename', { id, title }),
+  chatSearch: (query) => ipcRenderer.invoke('chat:search', query),
+  chatSetProject: (id, projectId) => ipcRenderer.invoke('chat:set-project', { id, projectId }),
   chatStream: (payload, runId) => ipcRenderer.invoke('llama:chat', payload, runId),
+
+  // Projects
+  projectsList: () => ipcRenderer.invoke('projects:list'),
+  projectsAdd: (name) => ipcRenderer.invoke('projects:add', name),
+  projectsRename: (id, name) => ipcRenderer.invoke('projects:rename', { id, name }),
+  projectsDelete: (id) => ipcRenderer.invoke('projects:delete', id),
 
   // Network sharing
   webInfo: () => ipcRenderer.invoke('web:info'),

@@ -11,6 +11,7 @@ const state = {
   modelInstalled: false,
   // Chat
   currentChatId: null,
+  projects: [],
   currentMessages: [],
   pendingAgentEl: null,
   pendingAgentText: '',
@@ -63,12 +64,8 @@ function setStreamingMeter(el, { tokens, startedAt, label }) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
-// Spinning skull element. We use an <img> pointing at the high-res glow PNG
-// (icons/skull.png) so the chat bubble shows the real artwork instead of the
-// older geometric inline SVG. The .skull-spin class drives the rotation via
-// CSS transform — same animation, just on an <img> now.
 function skullSvg(extraClass = '') {
-  return `<img class="skull-mark ${extraClass}" src="icons/skull.png" width="28" height="28" alt="" aria-hidden="true" />`;
+  return `<svg class="${extraClass}" viewBox="0 0 100 100" width="28" height="28" aria-hidden="true"><use href="#skull-svg"/></svg>`;
 }
 function claudeStarSvg(extraClass = '') {
   return `<svg class="claude-star ${extraClass}" viewBox="0 0 100 100" width="26" height="26" aria-hidden="true"><use href="#claude-star"/></svg>`;
@@ -199,38 +196,160 @@ $('#btn-cancel-download').addEventListener('click', () => window.bones.modelCanc
 
 // ===== CHAT =====
 
+// Which project groups are collapsed (by id; '_unfiled' for the catch-all).
+const collapsedProjects = new Set();
+let chatSearchTerm = '';
+
 async function refreshChatList() {
-  const list = await window.bones.chatList();
   const root = $('#chat-list');
+  const [list, projects] = await Promise.all([
+    chatSearchTerm ? window.bones.chatSearch(chatSearchTerm) : window.bones.chatList(),
+    window.bones.projectsList ? window.bones.projectsList() : [],
+  ]);
+  state.projects = projects || [];
+
   if (!list || list.length === 0) {
-    root.innerHTML = '<div class="muted" style="padding:8px 10px;font-size:12px">No chats yet.</div>';
+    root.innerHTML = chatSearchTerm
+      ? `<div class="muted" style="padding:8px 10px;font-size:12px">No chats match “${escapeHtml(chatSearchTerm)}”.</div>`
+      : '<div class="muted" style="padding:8px 10px;font-size:12px">No chats yet.</div>';
     return;
   }
+
+  // Group chats by project_id. When searching, flatten (no groups) so results
+  // are easy to scan.
   root.innerHTML = '';
-  for (const c of list) {
-    const row = document.createElement('div');
-    row.className = 'chat-row' + (c.id === state.currentChatId ? ' active' : '');
-    row.innerHTML = `
-      <span class="chat-row-title">${escapeHtml(c.title)}</span>
-      <button class="chat-row-del" data-id="${c.id}" title="Delete">×</button>
-    `;
-    row.addEventListener('click', (e) => {
-      if (e.target.classList.contains('chat-row-del')) return;
-      loadChat(c.id);
-    });
-    root.appendChild(row);
-  }
-  $$('.chat-row-del').forEach((b) =>
-    b.addEventListener('click', async (e) => {
-      e.stopPropagation();
-      await window.bones.chatDelete(b.dataset.id);
-      if (state.currentChatId === b.dataset.id) {
-        startNewChat();
+  if (chatSearchTerm) {
+    for (const c of list) root.appendChild(chatRow(c, { showSnippet: true }));
+  } else {
+    const byProject = new Map();
+    const unfiled = [];
+    for (const c of list) {
+      if (c.project_id && (projects || []).some((p) => p.id === c.project_id)) {
+        if (!byProject.has(c.project_id)) byProject.set(c.project_id, []);
+        byProject.get(c.project_id).push(c);
       } else {
-        refreshChatList();
+        unfiled.push(c);
       }
-    })
+    }
+    // Projects first (alpha), then unfiled.
+    for (const p of projects || []) {
+      const chatsIn = byProject.get(p.id) || [];
+      root.appendChild(projectGroup(p, chatsIn));
+    }
+    if (unfiled.length) {
+      root.appendChild(projectGroup({ id: '_unfiled', name: 'Unfiled' }, unfiled, true));
+    }
+  }
+}
+
+function projectGroup(project, chatsIn, isUnfiled = false) {
+  const wrap = document.createElement('div');
+  wrap.className = 'project-group';
+  const collapsed = collapsedProjects.has(project.id);
+  const head = document.createElement('div');
+  head.className = 'project-head' + (collapsed ? ' collapsed' : '');
+  head.innerHTML = `
+    <span class="project-caret">▾</span>
+    <span class="project-name"></span>
+    <span class="project-count">${chatsIn.length}</span>
+    ${isUnfiled ? '' : '<button class="project-menu-btn" title="Rename or delete">⋯</button>'}
+  `;
+  head.querySelector('.project-name').textContent = project.name;
+  head.addEventListener('click', (e) => {
+    if (e.target.classList.contains('project-menu-btn')) return;
+    if (collapsedProjects.has(project.id)) collapsedProjects.delete(project.id);
+    else collapsedProjects.add(project.id);
+    refreshChatList();
+  });
+  if (!isUnfiled) {
+    head.querySelector('.project-menu-btn').addEventListener('click', (e) => {
+      e.stopPropagation();
+      projectMenu(project);
+    });
+  }
+  wrap.appendChild(head);
+  if (!collapsed) {
+    const body = document.createElement('div');
+    body.className = 'project-body';
+    if (chatsIn.length === 0) {
+      body.innerHTML = '<div class="project-empty muted">empty</div>';
+    } else {
+      for (const c of chatsIn) body.appendChild(chatRow(c));
+    }
+    wrap.appendChild(body);
+  }
+  return wrap;
+}
+
+function chatRow(c, { showSnippet = false } = {}) {
+  const row = document.createElement('div');
+  row.className = 'chat-row' + (c.id === state.currentChatId ? ' active' : '');
+  row.innerHTML = `
+    <div class="chat-row-main">
+      <span class="chat-row-title"></span>
+      ${showSnippet && c.snippet ? '<span class="chat-row-snippet"></span>' : ''}
+    </div>
+    <button class="chat-row-file" data-id="${c.id}" title="File in project">⊕</button>
+    <button class="chat-row-del" data-id="${c.id}" title="Delete">×</button>
+  `;
+  row.querySelector('.chat-row-title').textContent = c.title;
+  if (showSnippet && c.snippet) row.querySelector('.chat-row-snippet').textContent = c.snippet;
+  row.addEventListener('click', (e) => {
+    if (e.target.closest('.chat-row-del') || e.target.closest('.chat-row-file')) return;
+    loadChat(c.id);
+  });
+  row.querySelector('.chat-row-del').addEventListener('click', async (e) => {
+    e.stopPropagation();
+    if (!confirm('Delete this chat?')) return;
+    await window.bones.chatDelete(c.id);
+    if (state.currentChatId === c.id) startNewChat();
+    else refreshChatList();
+  });
+  row.querySelector('.chat-row-file').addEventListener('click', (e) => {
+    e.stopPropagation();
+    fileChatMenu(c);
+  });
+  return row;
+}
+
+// Simple inline menu (uses prompt/confirm to stay dependency-free) for filing
+// a chat into a project.
+async function fileChatMenu(chat) {
+  const projects = state.projects || [];
+  const labels = projects.map((p, i) => `${i + 1}. ${p.name}`).join('\n');
+  const choice = prompt(
+    `File "${chat.title}" into which project?\n\n${labels || '(no projects yet)'}\n\nType a number, a new project name, or "none" to unfile.`,
+    ''
   );
+  if (choice == null) return;
+  const trimmed = choice.trim();
+  if (!trimmed || trimmed.toLowerCase() === 'none') {
+    await window.bones.chatSetProject(chat.id, null);
+  } else if (/^\d+$/.test(trimmed) && projects[Number(trimmed) - 1]) {
+    await window.bones.chatSetProject(chat.id, projects[Number(trimmed) - 1].id);
+  } else {
+    // Treat as a new project name.
+    const p = await window.bones.projectsAdd(trimmed);
+    if (p && p.id) await window.bones.chatSetProject(chat.id, p.id);
+  }
+  refreshChatList();
+}
+
+async function projectMenu(project) {
+  const action = prompt(
+    `Project "${project.name}"\n\nType:\n- a new name to rename\n- "delete" to remove the project (chats become Unfiled)`,
+    project.name
+  );
+  if (action == null) return;
+  const a = action.trim();
+  if (a.toLowerCase() === 'delete') {
+    if (confirm(`Delete project "${project.name}"? Its chats will move to Unfiled.`)) {
+      await window.bones.projectsDelete(project.id);
+    }
+  } else if (a && a !== project.name) {
+    await window.bones.projectsRename(project.id, a);
+  }
+  refreshChatList();
 }
 
 function startNewChat() {
@@ -342,6 +461,33 @@ function appendThinkingBubble({ source = 'local' } = {}) {
 }
 
 $('#btn-new-chat').addEventListener('click', startNewChat);
+
+// Chat search box — debounced.
+let chatSearchTimer = null;
+if (document.getElementById('chat-search')) {
+  $('#chat-search').addEventListener('input', (e) => {
+    chatSearchTerm = e.target.value.trim();
+    $('#chat-search-clear').hidden = !chatSearchTerm;
+    clearTimeout(chatSearchTimer);
+    chatSearchTimer = setTimeout(refreshChatList, 180);
+  });
+  $('#chat-search-clear').addEventListener('click', () => {
+    chatSearchTerm = '';
+    $('#chat-search').value = '';
+    $('#chat-search-clear').hidden = true;
+    refreshChatList();
+  });
+}
+
+// New project.
+if (document.getElementById('btn-new-project')) {
+  $('#btn-new-project').addEventListener('click', async () => {
+    const name = prompt('Name the new project:', '');
+    if (name == null || !name.trim()) return;
+    await window.bones.projectsAdd(name.trim());
+    refreshChatList();
+  });
+}
 
 $('#chat-form').addEventListener('submit', async (e) => {
   e.preventDefault();
