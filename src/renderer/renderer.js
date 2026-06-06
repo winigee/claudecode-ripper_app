@@ -63,8 +63,12 @@ function setStreamingMeter(el, { tokens, startedAt, label }) {
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
+// Spinning skull element. We use an <img> pointing at the high-res glow PNG
+// (icons/skull.png) so the chat bubble shows the real artwork instead of the
+// older geometric inline SVG. The .skull-spin class drives the rotation via
+// CSS transform — same animation, just on an <img> now.
 function skullSvg(extraClass = '') {
-  return `<svg class="${extraClass}" viewBox="0 0 100 100" width="28" height="28" aria-hidden="true"><use href="#skull-svg"/></svg>`;
+  return `<img class="skull-mark ${extraClass}" src="icons/skull.png" width="28" height="28" alt="" aria-hidden="true" />`;
 }
 function claudeStarSvg(extraClass = '') {
   return `<svg class="claude-star ${extraClass}" viewBox="0 0 100 100" width="26" height="26" aria-hidden="true"><use href="#claude-star"/></svg>`;

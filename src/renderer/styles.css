@@ -220,9 +220,14 @@ main {
   color: var(--muted);
 }
 .chat-empty .skull-static {
-  opacity: 0.4;
+  width: 160px;
+  height: auto;
+  opacity: 0.55;
   margin-bottom: 16px;
-  color: var(--accent);
+}
+img.skull-mark {
+  display: inline-block;
+  vertical-align: middle;
 }
 
 .bubble {
@@ -1453,6 +1458,11 @@ details.brief-detail-section .brief-detail-body {
   gap: 14px;
   margin-bottom: 14px;
   color: var(--accent);
+}
+.about-skull {
+  width: 96px;
+  height: auto;
+  flex-shrink: 0;
 }
 .about-name {
   font-size: 18px;
