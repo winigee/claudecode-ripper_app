@@ -803,11 +803,36 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   margin-top: 14px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 16px;
   font-size: 12px;
   color: var(--text-dim);
   line-height: 1.7;
 }
 .about-credits strong { color: var(--text); }
+.about-portrait {
+  margin: 0;
+  flex-shrink: 0;
+  text-align: center;
+}
+.about-portrait img {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--accent-dim);
+  box-shadow: 0 0 12px rgba(76, 199, 255, 0.18);
+}
+.about-portrait figcaption {
+  margin-top: 6px;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.about-credits-text { flex: 1; }
 
 /* --- Settings sub-nav (sticky pill row) --- */
 .settings-subnav {
