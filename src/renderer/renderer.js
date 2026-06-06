@@ -12,6 +12,7 @@ const state = {
   // Chat
   currentChatId: null,
   projects: [],
+  pendingProjectId: null,
   currentMessages: [],
   pendingAgentEl: null,
   pendingAgentText: '',
@@ -35,6 +36,91 @@ const state = {
 
 // Render a progress bar with a label and a percentage into any container.
 // pct=null means indeterminate (animated stripe). Mirrors the .prog CSS in
+// ----- In-app input modal (Electron has no window.prompt) -----
+// Returns a promise that resolves to the entered string, or null if cancelled.
+function showInput({ title, label = '', value = '', placeholder = '', okText = 'OK' }) {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    modal.innerHTML = `
+      <div class="modal-card modal-small">
+        <div class="modal-head"><h3></h3></div>
+        ${label ? '<p class="hint input-modal-label"></p>' : ''}
+        <div style="padding:6px 18px 0">
+          <input type="text" class="input-modal-field" />
+        </div>
+        <div class="modal-actions">
+          <button data-act="cancel">Cancel</button>
+          <button data-act="ok" class="primary"></button>
+        </div>
+      </div>`;
+    modal.querySelector('h3').textContent = title || 'Enter a value';
+    if (label) modal.querySelector('.input-modal-label').textContent = label;
+    const field = modal.querySelector('.input-modal-field');
+    field.placeholder = placeholder;
+    field.value = value;
+    modal.querySelector('[data-act="ok"]').textContent = okText;
+    document.body.appendChild(modal);
+    field.focus();
+    field.select();
+    const done = (val) => { document.body.removeChild(modal); resolve(val); };
+    modal.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-act]');
+      if (btn) { done(btn.dataset.act === 'ok' ? field.value.trim() : null); return; }
+      if (e.target === modal) done(null); // click backdrop = cancel
+    });
+    field.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); done(field.value.trim()); }
+      if (e.key === 'Escape') { e.preventDefault(); done(null); }
+    });
+  });
+}
+
+// ----- Right-click context menu -----
+// items: array of { label, onClick, disabled, danger } or { separator: true }
+// or { header: 'text' }. Submenus aren't needed — we keep it one level.
+let _ctxMenuEl = null;
+function closeContextMenu() {
+  if (_ctxMenuEl) { _ctxMenuEl.remove(); _ctxMenuEl = null; }
+}
+function showContextMenu(x, y, items) {
+  closeContextMenu();
+  const menu = document.createElement('div');
+  menu.className = 'ctx-menu';
+  for (const it of items) {
+    if (it.separator) {
+      const sep = document.createElement('div');
+      sep.className = 'ctx-sep';
+      menu.appendChild(sep);
+    } else if (it.header) {
+      const h = document.createElement('div');
+      h.className = 'ctx-header';
+      h.textContent = it.header;
+      menu.appendChild(h);
+    } else {
+      const item = document.createElement('div');
+      item.className = 'ctx-item' + (it.disabled ? ' disabled' : '') + (it.danger ? ' danger' : '') + (it.checked ? ' checked' : '');
+      item.textContent = it.label;
+      if (!it.disabled) {
+        item.addEventListener('click', () => { closeContextMenu(); it.onClick && it.onClick(); });
+      }
+      menu.appendChild(item);
+    }
+  }
+  document.body.appendChild(menu);
+  // Position, keeping it on-screen.
+  const rect = menu.getBoundingClientRect();
+  const px = Math.min(x, window.innerWidth - rect.width - 8);
+  const py = Math.min(y, window.innerHeight - rect.height - 8);
+  menu.style.left = px + 'px';
+  menu.style.top = py + 'px';
+  _ctxMenuEl = menu;
+}
+// Dismiss on any outside click / escape / scroll.
+document.addEventListener('click', (e) => { if (_ctxMenuEl && !_ctxMenuEl.contains(e.target)) closeContextMenu(); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeContextMenu(); });
+window.addEventListener('blur', closeContextMenu);
+
 // styles.css — single source of truth for what a progress indicator looks like.
 function renderProgress(container, { pct, label, sub }) {
   if (!container) return;
@@ -264,7 +350,12 @@ function projectGroup(project, chatsIn, isUnfiled = false) {
   if (!isUnfiled) {
     head.querySelector('.project-menu-btn').addEventListener('click', (e) => {
       e.stopPropagation();
-      projectMenu(project);
+      const r = e.target.getBoundingClientRect();
+      projectMenu(project, r.left, r.bottom);
+    });
+    head.addEventListener('contextmenu', (e) => {
+      e.preventDefault(); e.stopPropagation();
+      projectMenu(project, e.clientX, e.clientY);
     });
   }
   wrap.appendChild(head);
@@ -307,50 +398,117 @@ function chatRow(c, { showSnippet = false } = {}) {
   });
   row.querySelector('.chat-row-file').addEventListener('click', (e) => {
     e.stopPropagation();
-    fileChatMenu(c);
+    const r = e.target.getBoundingClientRect();
+    fileChatMenu(c, r.left, r.bottom);
+  });
+  row.addEventListener('contextmenu', (e) => {
+    e.preventDefault(); e.stopPropagation();
+    _lastCtxAnchor = { x: e.clientX, y: e.clientY };
+    chatRowMenu(c, e.clientX, e.clientY);
   });
   return row;
 }
 
-// Simple inline menu (uses prompt/confirm to stay dependency-free) for filing
-// a chat into a project.
-async function fileChatMenu(chat) {
+// Context menu for filing a chat into a project (the ⊕ button + right-click).
+function fileChatMenu(chat, x, y) {
   const projects = state.projects || [];
-  const labels = projects.map((p, i) => `${i + 1}. ${p.name}`).join('\n');
-  const choice = prompt(
-    `File "${chat.title}" into which project?\n\n${labels || '(no projects yet)'}\n\nType a number, a new project name, or "none" to unfile.`,
-    ''
-  );
-  if (choice == null) return;
-  const trimmed = choice.trim();
-  if (!trimmed || trimmed.toLowerCase() === 'none') {
-    await window.bones.chatSetProject(chat.id, null);
-  } else if (/^\d+$/.test(trimmed) && projects[Number(trimmed) - 1]) {
-    await window.bones.chatSetProject(chat.id, projects[Number(trimmed) - 1].id);
-  } else {
-    // Treat as a new project name.
-    const p = await window.bones.projectsAdd(trimmed);
-    if (p && p.id) await window.bones.chatSetProject(chat.id, p.id);
+  const items = [{ header: `File "${truncate(chat.title, 28)}"` }];
+  for (const p of projects) {
+    items.push({
+      label: p.name,
+      checked: chat.project_id === p.id,
+      onClick: async () => { await window.bones.chatSetProject(chat.id, p.id); refreshChatList(); },
+    });
   }
+  if (projects.length) items.push({ separator: true });
+  items.push({
+    label: '＋ New project…',
+    onClick: async () => {
+      const name = await showInput({ title: 'New project', placeholder: 'Project name', okText: 'Create & file' });
+      if (!name) return;
+      const p = await window.bones.projectsAdd(name);
+      if (p && p.id) await window.bones.chatSetProject(chat.id, p.id);
+      refreshChatList();
+    },
+  });
+  if (chat.project_id) {
+    items.push({
+      label: 'Remove from project',
+      onClick: async () => { await window.bones.chatSetProject(chat.id, null); refreshChatList(); },
+    });
+  }
+  showContextMenu(x, y, items);
+}
+
+// Context menu for a chat row (right-click).
+function chatRowMenu(chat, x, y) {
+  showContextMenu(x, y, [
+    { label: 'Open', onClick: () => loadChat(chat.id) },
+    { label: 'Rename…', onClick: () => renameChat(chat) },
+    { label: 'File into project…', onClick: () => {
+      const r = _lastCtxAnchor; fileChatMenu(chat, r.x, r.y);
+    } },
+    { separator: true },
+    { label: 'Delete chat', danger: true, onClick: async () => {
+      if (!confirm('Delete this chat?')) return;
+      await window.bones.chatDelete(chat.id);
+      if (state.currentChatId === chat.id) startNewChat(); else refreshChatList();
+    } },
+  ]);
+}
+
+async function renameChat(chat) {
+  const title = await showInput({ title: 'Rename chat', value: chat.title, okText: 'Rename' });
+  if (!title || title === chat.title) return;
+  await window.bones.chatRename(chat.id, title);
   refreshChatList();
 }
 
-async function projectMenu(project) {
-  const action = prompt(
-    `Project "${project.name}"\n\nType:\n- a new name to rename\n- "delete" to remove the project (chats become Unfiled)`,
-    project.name
-  );
-  if (action == null) return;
-  const a = action.trim();
-  if (a.toLowerCase() === 'delete') {
-    if (confirm(`Delete project "${project.name}"? Its chats will move to Unfiled.`)) {
+// Context menu for a project header (the ⋯ button + right-click).
+function projectMenu(project, x, y) {
+  showContextMenu(x, y, [
+    { header: project.name },
+    { label: 'New chat in project', onClick: () => {
+      state.pendingProjectId = project.id;
+      startNewChat();
+      setStatus(`new chat → ${project.name}`, 'ok');
+    } },
+    { label: 'Rename…', onClick: async () => {
+      const name = await showInput({ title: 'Rename project', value: project.name, okText: 'Rename' });
+      if (name && name !== project.name) { await window.bones.projectsRename(project.id, name); refreshChatList(); }
+    } },
+    { separator: true },
+    { label: 'Delete project', danger: true, onClick: async () => {
+      if (!confirm(`Delete project "${project.name}"? Its chats move to Unfiled.`)) return;
       await window.bones.projectsDelete(project.id);
-    }
-  } else if (a && a !== project.name) {
-    await window.bones.projectsRename(project.id, a);
-  }
-  refreshChatList();
+      refreshChatList();
+    } },
+  ]);
 }
+
+// Context menu for the blank area of the chat list.
+function chatListBlankMenu(x, y) {
+  showContextMenu(x, y, [
+    { label: '＋ New chat', onClick: startNewChat },
+    { label: '＋ New project…', onClick: async () => {
+      const name = await showInput({ title: 'New project', placeholder: 'Project name', okText: 'Create' });
+      if (name) { await window.bones.projectsAdd(name); refreshChatList(); }
+    } },
+    { separator: true },
+    { label: 'Collapse all projects', onClick: () => {
+      for (const p of state.projects || []) collapsedProjects.add(p.id);
+      collapsedProjects.add('_unfiled');
+      refreshChatList();
+    } },
+    { label: 'Expand all projects', onClick: () => { collapsedProjects.clear(); refreshChatList(); } },
+  ]);
+}
+
+function truncate(s, n) {
+  s = String(s || '');
+  return s.length > n ? s.slice(0, n - 1) + '…' : s;
+}
+let _lastCtxAnchor = { x: 0, y: 0 };
 
 function startNewChat() {
   state.currentChatId = null;
@@ -482,10 +640,20 @@ if (document.getElementById('chat-search')) {
 // New project.
 if (document.getElementById('btn-new-project')) {
   $('#btn-new-project').addEventListener('click', async () => {
-    const name = prompt('Name the new project:', '');
-    if (name == null || !name.trim()) return;
-    await window.bones.projectsAdd(name.trim());
+    const name = await showInput({ title: 'New project', placeholder: 'Project name', okText: 'Create' });
+    if (!name) return;
+    await window.bones.projectsAdd(name);
     refreshChatList();
+  });
+}
+
+// Right-click the blank area of the chat list → blank-area menu.
+if (document.querySelector('.chat-list-wrap')) {
+  document.querySelector('.chat-list-wrap').addEventListener('contextmenu', (e) => {
+    // Only when not over a chat row or project head (those handle their own).
+    if (e.target.closest('.chat-row') || e.target.closest('.project-head')) return;
+    e.preventDefault();
+    chatListBlankMenu(e.clientX, e.clientY);
   });
 }
 
@@ -531,7 +699,13 @@ $('#chat-form').addEventListener('submit', async (e) => {
       id: state.currentChatId,
       messages: state.currentMessages,
     });
-    if (saved && saved.id) state.currentChatId = saved.id;
+    if (saved && saved.id) {
+      state.currentChatId = saved.id;
+      if (state.pendingProjectId) {
+        await window.bones.chatSetProject(saved.id, state.pendingProjectId);
+        state.pendingProjectId = null;
+      }
+    }
     refreshChatList();
   } catch (err) {
     state.pendingAgentEl.classList.remove('thinking');
@@ -644,7 +818,13 @@ async function askClaudeFromChat() {
     }
     // 6. Persist the chat with the model tag preserved.
     const saved = await window.bones.chatSave({ id: state.currentChatId, messages: state.currentMessages });
-    if (saved && saved.id) state.currentChatId = saved.id;
+    if (saved && saved.id) {
+      state.currentChatId = saved.id;
+      if (state.pendingProjectId) {
+        await window.bones.chatSetProject(saved.id, state.pendingProjectId);
+        state.pendingProjectId = null;
+      }
+    }
     refreshChatList();
   } catch (err) {
     state.pendingAgentEl.classList.remove('thinking');

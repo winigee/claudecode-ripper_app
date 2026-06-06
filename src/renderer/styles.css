@@ -188,6 +188,57 @@ body {
 .project-body { padding-left: 6px; }
 .project-empty { font-size: 11px; padding: 4px 12px; font-style: italic; }
 
+/* Right-click context menu */
+.ctx-menu {
+  position: fixed;
+  z-index: 1000;
+  min-width: 180px;
+  background: var(--bg-2);
+  border: 1px solid var(--border-hi);
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  font-size: 12.5px;
+  -webkit-app-region: no-drag;
+}
+.ctx-header {
+  padding: 5px 10px 4px;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--muted);
+}
+.ctx-item {
+  padding: 6px 10px;
+  border-radius: 4px;
+  cursor: pointer;
+  color: var(--text);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.ctx-item:hover { background: var(--bg-3); color: var(--accent); }
+.ctx-item.disabled { color: var(--muted); cursor: default; }
+.ctx-item.disabled:hover { background: transparent; color: var(--muted); }
+.ctx-item.danger:hover { color: var(--err); background: rgba(255, 123, 123, 0.1); }
+.ctx-item.checked::before { content: "✓"; color: var(--accent); margin-right: -2px; }
+.ctx-item:not(.checked)::before { content: ""; width: 10px; display: inline-block; }
+.ctx-sep { height: 1px; background: var(--border); margin: 4px 6px; }
+
+/* Input modal field */
+.input-modal-field {
+  width: 100%;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 8px 10px;
+}
+.input-modal-field:focus { outline: none; border-color: var(--accent-dim); }
+.input-modal-label { padding: 4px 18px 0; }
+
 /* Chat row enhancements (file button + search snippet) */
 .chat-row-main { flex: 1; min-width: 0; }
 .chat-row-snippet {
