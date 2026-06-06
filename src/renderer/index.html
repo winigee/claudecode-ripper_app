@@ -41,6 +41,7 @@
         <button data-tab="absorb" class="tab">Absorb</button>
         <button data-tab="brain" class="tab">Brain</button>
         <button data-tab="settings" class="tab">Settings</button>
+        <button data-tab="about" class="tab">About</button>
       </nav>
 
       <div class="status" id="status">starting…</div>
@@ -218,6 +219,45 @@
         <div id="brain-list"></div>
       </section>
 
+      <!-- About tab — top-level. -->
+      <section id="tab-about" class="tab-panel">
+        <h2>About</h2>
+        <div class="about">
+          <div class="about-brand">
+            <svg viewBox="0 0 100 100" width="42" height="42" aria-hidden="true"><use href="#skull-svg"/></svg>
+            <div>
+              <div class="about-name"><span class="brand-bone">BONE</span><span class="brand-ai">SAI</span></div>
+              <div class="about-version">Version <span id="about-version">2.8.5</span></div>
+            </div>
+          </div>
+
+          <p class="hint">
+            <strong>Local-first.</strong> Inference, search, and redaction all run on this Mac via
+            llamafile + a local model. The one exception is “Send to Claude”, which reaches the
+            Anthropic API on purpose — and only ever with material you have redacted first.
+          </p>
+          <p class="hint">
+            Configuration, Brain notes, and chat history live under
+            <code>~/Library/Application Support/BonesAI/</code>.
+          </p>
+
+          <div class="about-credits">
+            <figure class="about-portrait">
+              <img src="about/winston.jpg"
+                   srcset="about/winston.jpg 1x, about/winston@2x.jpg 2x"
+                   alt="Winston Green"
+                   width="96" height="96" />
+              <figcaption>Founder</figcaption>
+            </figure>
+            <div class="about-credits-text">
+              <div>Authored by <strong>Winston Green</strong>.</div>
+              <div>Property of <strong>WNSTNGRN Ltd</strong>.</div>
+              <div>All rights reserved. © 2026 WNSTNGRN Ltd.</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Settings tab -->
       <section id="tab-settings" class="tab-panel">
         <h2>Settings</h2>
@@ -231,7 +271,6 @@
           <button data-jump="setting-sharing" class="snav">Sharing</button>
           <button data-jump="setting-help" class="snav">Help &amp; FAQ</button>
           <button data-jump="setting-diag" class="snav">Diagnostics</button>
-          <button data-jump="setting-about" class="snav">About</button>
         </nav>
 
         <div class="setting active" id="setting-memory">
@@ -322,44 +361,6 @@
             <button id="btn-open-models-folder">Open folder</button>
           </div>
           <div id="model-list" class="model-list"></div>
-        </div>
-
-        <div class="setting" id="setting-about">
-          <label>About</label>
-          <div class="about">
-            <div class="about-brand">
-              <svg viewBox="0 0 100 100" width="42" height="42" aria-hidden="true"><use href="#skull-svg"/></svg>
-              <div>
-                <div class="about-name"><span class="brand-bone">BONE</span><span class="brand-ai">SAI</span></div>
-                <div class="about-version">Version <span id="about-version">2.7.4</span></div>
-              </div>
-            </div>
-
-            <p class="hint">
-              <strong>Local-first.</strong> Inference, search, and redaction all run on this Mac via
-              llamafile + a local model. The one exception is “Send to Claude”, which reaches the
-              Anthropic API on purpose — and only ever with material you have redacted first.
-            </p>
-            <p class="hint">
-              Configuration, Brain notes, and chat history live under
-              <code>~/Library/Application Support/BonesAI/</code>.
-            </p>
-
-            <div class="about-credits">
-              <figure class="about-portrait">
-                <img src="about/winston.jpg"
-                     srcset="about/winston.jpg 1x, about/winston@2x.jpg 2x"
-                     alt="Winston Green"
-                     width="96" height="96" />
-                <figcaption>Founder</figcaption>
-              </figure>
-              <div class="about-credits-text">
-                <div>Authored by <strong>Winston Green</strong>.</div>
-                <div>Property of <strong>WNSTNGRN Ltd</strong>.</div>
-                <div>All rights reserved. © 2026 WNSTNGRN Ltd.</div>
-              </div>
-            </div>
-          </div>
         </div>
 
         <div class="setting" id="setting-help">
@@ -511,6 +512,14 @@
           <path d="M15 4a3 3 0 0 1 3 3v0a3 3 0 0 1 2 5 3 3 0 0 1 0 4 3 3 0 0 1-3 4h-2V4z"/>
         </svg>
         <span>Brain</span>
+      </button>
+      <button data-tab="about" class="tab btab" aria-label="About">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="10"/>
+          <line x1="12" y1="16" x2="12" y2="12"/>
+          <line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+        <span>About</span>
       </button>
       <button data-tab="settings" class="tab btab" aria-label="Settings">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

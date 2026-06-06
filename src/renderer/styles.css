@@ -1365,7 +1365,7 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   /* Bottom tab bar */
   .bottom-nav {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(6, 1fr);
     position: fixed;
     left: 0; right: 0; bottom: 0;
     z-index: 7;
@@ -1385,10 +1385,16 @@ input[type=text]:focus, #paste-area:focus, select:focus {
     background: transparent;
     border: none;
     color: var(--text-dim);
-    font-size: 10.5px;
-    letter-spacing: 0.3px;
-    padding: 6px 4px;
+    font-size: 9.5px;
+    letter-spacing: 0.2px;
+    padding: 6px 2px;
     min-height: 0;
+  }
+  .btab span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
   }
   .btab svg { opacity: 0.85; }
   .btab.active {
