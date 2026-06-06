@@ -169,9 +169,14 @@
     // Shared memory — host only for now (lives on the host filesystem / iCloud)
     memoryList: async () => [],
     memoryAdd: async () => ({ error: 'host only' }),
+    memoryAddMany: async () => ({ added: 0, entries: [] }),
     memoryDelete: async () => ({ ok: false }),
     memoryConfig: async () => ({ error: 'host only' }),
     memorySetICloud: async () => ({ error: 'host only' }),
+
+    // Absorb — host only (needs the local model on the host Mac)
+    absorbRun: async () => ({ error: { message: 'Absorb is only available on the host Mac.' } }),
+    onAbsorbProgress: () => {},
 
     // Chat
     chatList: () => GET('/api/chats'),

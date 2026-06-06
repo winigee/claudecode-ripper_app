@@ -16,6 +16,8 @@ const state = {
   pendingAgentText: '',
   // Token routing for non-chat streams
   tokenSink: null, // 'cannon' | null
+  // Absorb (review modal staging)
+  absorbDocs: [],   // [{ name, facts: [{ text, picked }] }]
   // Cannon
   redactedText: '',
   redactMap: {},         // { '[PERSON_1]': 'Jane Doe', ... } — local only, never persisted
@@ -589,6 +591,144 @@ $('#search-query').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
 });
 
+// ===== ABSORB =====
+
+const ABSORB_LABELS = {
+  file: (p) => `Reading file ${p.index}/${p.of}: ${p.file}…`,
+  extracting: (p) => `Extracting knowledge from ${p.file} (part ${p.chunk}/${p.of})…`,
+  done: () => '',
+};
+
+if (window.bones.onAbsorbProgress) {
+  window.bones.onAbsorbProgress((p) => {
+    if (p.runId !== state.currentRunId) return;
+    const el = $('#absorb-progress');
+    if (!el) return;
+    const fn = ABSORB_LABELS[p.stage];
+    const msg = fn ? fn(p) : '';
+    if (!msg) { el.hidden = true; return; }
+    el.hidden = false;
+    el.textContent = msg;
+  });
+}
+
+$('#btn-absorb').addEventListener('click', async () => {
+  if (state.currentRunId) return;
+  if (!state.serverReady) { setStatus('model not ready', 'err'); return; }
+  if (state.files.length === 0) {
+    setStatus('drop or pick files first', 'err');
+    return;
+  }
+  const runId = 'ab-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  state.currentRunId = runId;
+  $('#btn-absorb').disabled = true;
+  $('#btn-absorb-cancel').hidden = false;
+  setStatus('absorbing…', 'warn');
+  try {
+    const payload = state.files.map((f) => ({ name: f.name || f.path, text: f.text || '' }));
+    const res = await window.bones.absorbRun(payload, runId);
+    if (res && res.error) {
+      setStatus('absorb error: ' + (res.error.message || 'unknown'), 'err');
+      return;
+    }
+    // Stage docs + facts for review with everything ticked by default; user
+    // unticks anything they don't want.
+    state.absorbDocs = (res.documents || []).map((d) => ({
+      name: d.name,
+      facts: (d.facts || []).map((text) => ({ text, picked: true })),
+    }));
+    const total = state.absorbDocs.reduce((n, d) => n + d.facts.length, 0);
+    if (total === 0) {
+      setStatus('absorbed · no facts extracted', 'warn');
+      return;
+    }
+    showAbsorbModal();
+    setStatus(`absorbed · ${total} fact(s) to review`, 'ok');
+  } catch (err) {
+    setStatus('absorb error: ' + err.message, 'err');
+  } finally {
+    state.currentRunId = null;
+    $('#btn-absorb').disabled = false;
+    $('#btn-absorb-cancel').hidden = true;
+    $('#absorb-progress').hidden = true;
+  }
+});
+
+$('#btn-absorb-cancel').addEventListener('click', () => {
+  if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+});
+
+function showAbsorbModal() {
+  renderAbsorbReview();
+  $('#absorb-modal').hidden = false;
+}
+function hideAbsorbModal() {
+  $('#absorb-modal').hidden = true;
+  state.absorbDocs = [];
+}
+
+function renderAbsorbReview() {
+  const root = $('#absorb-review');
+  root.innerHTML = '';
+  for (let di = 0; di < state.absorbDocs.length; di++) {
+    const doc = state.absorbDocs[di];
+    const group = document.createElement('div');
+    group.className = 'absorb-group';
+    group.innerHTML = `<div class="absorb-source">From <code></code></div>`;
+    group.querySelector('code').textContent = doc.name;
+    for (let fi = 0; fi < doc.facts.length; fi++) {
+      const f = doc.facts[fi];
+      const row = document.createElement('label');
+      row.className = 'absorb-row';
+      row.innerHTML = `<input type="checkbox"><span class="absorb-text"></span>`;
+      const cb = row.querySelector('input');
+      cb.checked = f.picked;
+      cb.addEventListener('change', () => {
+        state.absorbDocs[di].facts[fi].picked = cb.checked;
+        updateAbsorbCounter();
+      });
+      row.querySelector('.absorb-text').textContent = f.text;
+      group.appendChild(row);
+    }
+    root.appendChild(group);
+  }
+  updateAbsorbCounter();
+}
+
+function updateAbsorbCounter() {
+  let total = 0, picked = 0;
+  for (const d of state.absorbDocs) for (const f of d.facts) { total++; if (f.picked) picked++; }
+  $('#absorb-counter').textContent = `${picked}/${total} selected`;
+}
+
+$('#btn-absorb-close').addEventListener('click', hideAbsorbModal);
+$('#btn-absorb-cancel-modal').addEventListener('click', () => {
+  if (!confirm('Discard all absorbed facts without saving?')) return;
+  hideAbsorbModal();
+  setStatus('absorbed facts discarded', 'warn');
+});
+$('#btn-absorb-all').addEventListener('click', () => {
+  for (const d of state.absorbDocs) for (const f of d.facts) f.picked = true;
+  renderAbsorbReview();
+});
+$('#btn-absorb-none').addEventListener('click', () => {
+  for (const d of state.absorbDocs) for (const f of d.facts) f.picked = false;
+  renderAbsorbReview();
+});
+$('#btn-absorb-save').addEventListener('click', async () => {
+  let savedTotal = 0;
+  for (const doc of state.absorbDocs) {
+    const picked = doc.facts.filter((f) => f.picked).map((f) => f.text);
+    if (picked.length === 0) continue;
+    const res = await window.bones.memoryAddMany(picked, doc.name);
+    if (res && typeof res.added === 'number') savedTotal += res.added;
+  }
+  hideAbsorbModal();
+  setStatus(`absorbed ${savedTotal} fact(s) into Memory`, 'ok');
+  // If Memory section is visible right now, refresh it.
+  refreshMemory();
+});
+
 // ===== REDACT & CANNON =====
 
 const REDACT_LABELS = {
@@ -1000,8 +1140,11 @@ async function refreshMemory() {
     for (const e of entries.slice().reverse()) {
       const row = document.createElement('div');
       row.className = 'memory-item';
-      row.innerHTML = `<span class="memory-text"></span><button class="memory-del" data-id="${e.id}" title="Forget">×</button>`;
+      const sourceMark = e.source ? '<span class="memory-source"></span>' : '';
+      row.innerHTML = `<div class="memory-body"><span class="memory-text"></span>${sourceMark}</div><button class="memory-del" data-id="${e.id}" title="Forget">×</button>`;
       row.querySelector('.memory-text').textContent = e.text;
+      const srcEl = row.querySelector('.memory-source');
+      if (srcEl) srcEl.textContent = 'from ' + e.source;
       list.appendChild(row);
     }
     $$('.memory-del').forEach((b) =>

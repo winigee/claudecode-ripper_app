@@ -12,6 +12,7 @@ const redact = require('./redact');
 const prompts = require('./prompts');
 const claudeApi = require('./claude-api');
 const memory = require('./memory');
+const absorb = require('./absorb');
 const brain = require('./brain');
 const chats = require('./chats');
 const webServer = require('./web-server');
@@ -441,10 +442,28 @@ ipcMain.handle('web:regen-token', () => webServer.regenerateToken());
 
 // --- Shared memory ---
 ipcMain.handle('memory:list', () => memory.list());
-ipcMain.handle('memory:add', (_e, text) => memory.add(text));
+ipcMain.handle('memory:add', (_e, text, source) => memory.add(text, source));
+ipcMain.handle('memory:add-many', (_e, items, source) => memory.addMany(items || [], source));
 ipcMain.handle('memory:delete', (_e, id) => memory.remove(id));
 ipcMain.handle('memory:config', () => memory.getConfig());
 ipcMain.handle('memory:set-icloud', (_e, on) => memory.setICloud(on));
+
+// --- Absorb ---
+ipcMain.handle('absorb:run', async (event, files, runId) => {
+  const ctrl = new AbortController();
+  activeRuns.set(runId, ctrl);
+  try {
+    const onProgress = (p) => {
+      try { event.sender.send('absorb:progress', { runId, ...p }); } catch (_) {}
+    };
+    return await absorb.absorbFiles(files || [], { onProgress, signal: ctrl.signal });
+  } catch (err) {
+    if (err.name === 'AbortError') return { error: { message: 'Cancelled', code: 'CANCELLED' } };
+    return errorPayload(err);
+  } finally {
+    activeRuns.delete(runId);
+  }
+});
 
 ipcMain.handle('brain:list', () => brain.listNotes());
 ipcMain.handle('brain:add', (_e, note) => brain.addNote(note || {}));

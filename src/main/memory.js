@@ -90,15 +90,39 @@ function list() {
   return readStore(activePath()).entries;
 }
 
-function add(text) {
+function add(text, source) {
   const clean = String(text || '').trim();
   if (!clean) return { error: 'empty' };
   const file = activePath();
   const store = readStore(file);
   const entry = { id: newId(), text: clean, created_at: new Date().toISOString() };
+  if (source) entry.source = String(source).slice(0, 200);
   store.entries.push(entry);
   writeStore(file, store);
   return entry;
+}
+
+// Bulk add — used by Absorb so a batch of facts from one document lands as
+// a coherent set rather than via N round-trips.
+function addMany(items, source) {
+  const file = activePath();
+  const store = readStore(file);
+  const seen = new Set(store.entries.map((e) => e.text.trim().toLowerCase()));
+  const added = [];
+  const now = new Date().toISOString();
+  for (const text of items || []) {
+    const clean = String(text || '').trim();
+    if (!clean) continue;
+    const key = clean.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const entry = { id: newId(), text: clean, created_at: now };
+    if (source) entry.source = String(source).slice(0, 200);
+    store.entries.push(entry);
+    added.push(entry);
+  }
+  writeStore(file, store);
+  return { added: added.length, entries: added };
 }
 
 function remove(id) {
@@ -160,4 +184,4 @@ function setICloud(on) {
   return getConfig();
 }
 
-module.exports = { list, add, remove, injectionText, getConfig, setICloud };
+module.exports = { list, add, addMany, remove, injectionText, getConfig, setICloud };

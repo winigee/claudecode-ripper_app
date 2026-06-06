@@ -62,10 +62,15 @@ contextBridge.exposeInMainWorld('bones', {
 
   // Shared memory
   memoryList: () => ipcRenderer.invoke('memory:list'),
-  memoryAdd: (text) => ipcRenderer.invoke('memory:add', text),
+  memoryAdd: (text, source) => ipcRenderer.invoke('memory:add', text, source),
+  memoryAddMany: (items, source) => ipcRenderer.invoke('memory:add-many', items, source),
   memoryDelete: (id) => ipcRenderer.invoke('memory:delete', id),
   memoryConfig: () => ipcRenderer.invoke('memory:config'),
   memorySetICloud: (on) => ipcRenderer.invoke('memory:set-icloud', on),
+
+  // Absorb (turn a document into Memory)
+  absorbRun: (files, runId) => ipcRenderer.invoke('absorb:run', files, runId),
+  onAbsorbProgress: (cb) => ipcRenderer.on('absorb:progress', (_e, p) => cb(p)),
 
   // Chat
   chatList: () => ipcRenderer.invoke('chat:list'),
