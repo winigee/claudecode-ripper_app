@@ -65,7 +65,13 @@ function buildUserContent(prompt, material) {
 
 // Streams the response. Calls onToken(text) for each text delta, returns the
 // full text. Parses the Anthropic SSE stream (content_block_delta events).
-async function send({ prompt, material, model, system }, { onToken, signal } = {}) {
+//
+// Two input shapes:
+//   - { prompt, material } — single-shot (cannon / Brain research). The
+//     material is appended below the prompt as one user message.
+//   - { messages: [{role, content}, ...] } — multi-turn (Ask Claude from
+//     chat). Messages are sent to the API directly.
+async function send({ prompt, material, model, system, messages }, { onToken, signal } = {}) {
   const a = getApiConfig();
   if (!a.key) {
     const e = new Error('No Anthropic API key set. Add one in Settings → Claude API.');
@@ -78,7 +84,9 @@ async function send({ prompt, material, model, system }, { onToken, signal } = {
     max_tokens: MAX_TOKENS,
     stream: true,
     system: system || CANNON_SYSTEM,
-    messages: [{ role: 'user', content: buildUserContent(prompt, material) }],
+    messages: messages && messages.length
+      ? messages
+      : [{ role: 'user', content: buildUserContent(prompt, material) }],
   };
 
   const resp = await fetch(ENDPOINT, {

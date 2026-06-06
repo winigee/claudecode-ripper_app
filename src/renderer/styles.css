@@ -1183,6 +1183,75 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   color: var(--accent-2);
 }
 
+/* --- Chat context-window meter --- */
+.context-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 14px 8px;
+  background: var(--bg-2);
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+.context-meter .ctx-bar {
+  width: 100%;
+  height: 4px;
+  background: var(--bg);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.context-meter .ctx-fill {
+  height: 100%;
+  width: 0;
+  background: var(--accent);
+  transition: width 0.25s, background 0.25s;
+}
+.context-meter .ctx-text {
+  display: flex;
+  justify-content: space-between;
+  font-family: ui-monospace, Menlo, monospace;
+}
+.context-meter #ctx-state { color: var(--accent); font-weight: 600; }
+.context-meter.fresh .ctx-fill { background: var(--ok); }
+.context-meter.fresh #ctx-state { color: var(--ok); }
+.context-meter.warm .ctx-fill { background: var(--accent); }
+.context-meter.warm #ctx-state { color: var(--accent); }
+.context-meter.tired .ctx-fill { background: var(--warn); }
+.context-meter.tired #ctx-state { color: var(--warn); }
+.context-meter.spent .ctx-fill { background: var(--err); animation: pulse 1.5s ease-in-out infinite; }
+.context-meter.spent #ctx-state { color: var(--err); font-weight: 700; }
+
+/* Ask Claude — distinct bubble styling so the user always knows when a chat
+   reply came from the API path vs the local model. */
+.bubble.agent.via-claude {
+  background: linear-gradient(135deg, var(--bubble-agent), rgba(206, 156, 255, 0.08));
+  border-left: 2px solid #ce9cff;
+}
+.bubble .via-claude-note {
+  margin-top: 6px;
+  font-size: 10.5px;
+  color: var(--muted);
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.bubble.via-claude .via-claude-note {
+  color: #b87cff;
+}
+
+#btn-chat-ask-claude {
+  background: var(--bg-3);
+  border: 1px solid #6f3fb5;
+  color: #ce9cff;
+  font-weight: 600;
+}
+#btn-chat-ask-claude:hover:not(:disabled) {
+  background: #2a1747;
+  border-color: #8a4fd6;
+}
+#btn-chat-ask-claude:disabled { opacity: 0.5; cursor: not-allowed; }
+
 /* --- Brain (research prompt engine) --- */
 .brain-view { display: flex; flex-direction: column; gap: 4px; }
 .brain-toolbar {

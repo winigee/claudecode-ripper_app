@@ -243,6 +243,45 @@ async function loadChat(id) {
   $('#tab-chat').classList.add('active');
 }
 
+// Live context-window meter at the top of Chat. Estimates token usage at
+// ~4 chars/token and shows it against the configured context limit, so the
+// user has a sense of how "full" Bones's working memory is before a reply
+// gets shortened or starts forgetting earlier turns.
+//
+// State labels:
+//   fresh  — under 50% used
+//   warm   — 50–75%
+//   tired  — 75–90% (warn colour, "Bones is getting tired")
+//   spent  — over 90% (err colour, suggest New chat)
+async function refreshContextMeter() {
+  const meterEl = $('#chat-context-meter');
+  if (!meterEl) return;
+  // Hide unless we have a running server we can ask for the limit.
+  let limit = 16384;
+  try {
+    const s = await window.bones.serverStatus();
+    if (s && s.runtime && s.runtime.context) limit = s.runtime.context;
+  } catch (_) {}
+  // Sum the conversation. ~4 chars per token is a reasonable rule of thumb
+  // for English chat; close enough for a "tired" gauge.
+  let chars = 0;
+  for (const m of state.currentMessages) chars += (m.content || '').length;
+  const used = Math.round(chars / 4);
+  const pct = Math.min(100, Math.round((used / limit) * 100));
+  $('#ctx-tokens').textContent = used.toLocaleString();
+  $('#ctx-limit').textContent = limit.toLocaleString();
+  let label = 'fresh';
+  let cls = 'fresh';
+  if (pct >= 90) { label = 'spent — start a new chat'; cls = 'spent'; }
+  else if (pct >= 75) { label = 'tired'; cls = 'tired'; }
+  else if (pct >= 50) { label = 'warm'; cls = 'warm'; }
+  $('#ctx-state').textContent = label;
+  meterEl.className = 'context-meter ' + cls;
+  meterEl.hidden = false;
+  const fill = meterEl.querySelector('.ctx-fill');
+  if (fill) fill.style.width = pct + '%';
+}
+
 function renderMessages() {
   const root = $('#chat-messages');
   if (state.currentMessages.length === 0) {
@@ -260,24 +299,30 @@ function renderMessages() {
     root.appendChild(bubbleFor(m));
   }
   root.scrollTop = root.scrollHeight;
+  refreshContextMeter();
 }
 
 function bubbleFor(message) {
   const div = document.createElement('div');
-  div.className = 'bubble ' + (message.role === 'user' ? 'user' : 'agent');
+  const isClaude = message.role === 'assistant' && (message.model || '').toLowerCase().startsWith('claude');
+  let cls = 'bubble ' + (message.role === 'user' ? 'user' : 'agent');
+  if (isClaude) cls += ' via-claude';
+  div.className = cls;
   if (message.role === 'user') {
     div.textContent = message.content;
   } else {
-    div.innerHTML = `<div class="bubble-content">${escapeHtml(message.content || '')}</div>`;
+    const tag = message.model ? `<div class="via-claude-note">${escapeHtml(isClaude ? 'via ' + message.model : message.model)}</div>` : '';
+    div.innerHTML = `<div class="bubble-content">${escapeHtml(message.content || '')}</div>${tag}`;
   }
   return div;
 }
 
-function appendThinkingBubble() {
+function appendThinkingBubble({ source = 'local' } = {}) {
   const root = $('#chat-messages');
   const div = document.createElement('div');
-  div.className = 'bubble agent thinking';
-  div.innerHTML = `${skullSvg('skull-spin')}<div class="bubble-content">thinking…</div><div class="streaming-meter" hidden></div>`;
+  div.className = 'bubble agent thinking ' + (source === 'claude' ? 'via-claude' : 'via-local');
+  const subtitle = source === 'claude' ? '<div class="via-claude-note">asking Claude (redacted)…</div>' : '';
+  div.innerHTML = `${skullSvg('skull-spin')}<div class="bubble-content">${source === 'claude' ? 'redacting & asking Claude…' : 'thinking…'}</div>${subtitle}<div class="streaming-meter" hidden></div>`;
   root.appendChild(div);
   root.scrollTop = root.scrollHeight;
   return div;
@@ -315,7 +360,12 @@ $('#chat-form').addEventListener('submit', async (e) => {
       state.pendingAgentEl.innerHTML = `<div class="bubble-content" style="color:var(--err)">Error: ${escapeHtml(res.error.message)}</div>`;
       state.currentMessages.push({ role: 'assistant', content: `[Error: ${res.error.message}]` });
     } else {
-      state.currentMessages.push({ role: 'assistant', content: state.pendingAgentText || res.text || '' });
+      const s = await window.bones.serverStatus();
+      state.currentMessages.push({
+        role: 'assistant',
+        content: state.pendingAgentText || res.text || '',
+        model: s.activeModelId || 'local',
+      });
     }
     // Persist the chat
     const saved = await window.bones.chatSave({
@@ -345,13 +395,158 @@ $('#btn-chat-cancel').addEventListener('click', () => {
   if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
 });
 
-// ⌘↩ submit
+// ⌘↩ submit · ⌘⇧↩ ask Claude
 $('#chat-input').addEventListener('keydown', (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
     e.preventDefault();
-    $('#chat-form').requestSubmit();
+    if (e.shiftKey) askClaudeFromChat();
+    else $('#chat-form').requestSubmit();
   }
 });
+
+// ----- Ask Claude (from chat) -----
+//
+// Redacts the whole conversation locally (regex + optional model NER), keeps
+// the placeholder→original map in memory, sends the redacted multi-turn
+// transcript to Claude, streams the reply, then swaps the placeholders back
+// before showing it. The reply is tagged with the Claude model so the chat
+// history visibly shows which turns came from where.
+$('#btn-chat-ask-claude').addEventListener('click', askClaudeFromChat);
+
+async function askClaudeFromChat() {
+  if (state.currentRunId) return;
+  const input = $('#chat-input');
+  const text = input.value.trim();
+  if (!text) return;
+  // Confirm Claude key is set before doing any work.
+  const ks = await window.bones.claudeKeyStatus();
+  if (!ks || !ks.hasKey) {
+    setStatus('no API key — Settings → Claude API', 'err');
+    return;
+  }
+  input.value = '';
+  state.currentMessages.push({ role: 'user', content: text });
+  renderMessages();
+
+  // Append the assistant bubble up front so the user sees something is
+  // happening; mark it as claude-sourced so it styles distinctly.
+  state.pendingAgentEl = appendThinkingBubble({ source: 'claude' });
+  state.pendingAgentText = '';
+  resetStreamMeter();
+
+  const runId = 'ac-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+  state.currentRunId = runId;
+  state.tokenSink = 'ask-claude';
+  $('#btn-chat-send').disabled = true;
+  $('#btn-chat-ask-claude').disabled = true;
+  $('#btn-chat-cancel').hidden = false;
+  setStatus('redacting…', 'warn');
+
+  try {
+    // 1. Redact the whole conversation as one block (so the same name across
+    //    turns maps to the same placeholder consistently).
+    const transcript = state.currentMessages
+      .map((m) => (m.role === 'user' ? 'User: ' : 'Assistant: ') + m.content)
+      .join('\n\n');
+    const redactRes = await window.bones.redact(
+      { text: transcript, useModel: state.serverReady },
+      runId + '-r'
+    );
+    if (redactRes && redactRes.error) throw new Error(redactRes.error.message || 'redact failed');
+
+    // 2. Stash the map so we can put real names back into Claude's reply.
+    const map = {};
+    for (const r of (redactRes.replacements || [])) map[r.placeholder] = r.original;
+    state.askClaudeMap = map;
+
+    // 3. Split the redacted transcript back into messages by role marker,
+    //    preserving multi-turn structure for Claude.
+    const messages = splitTranscriptToMessages(redactRes.text || transcript);
+
+    // 4. Stream the response.
+    setStatus('asking Claude…', 'warn');
+    const res = await window.bones.claudeSend({ messages }, runId);
+    if (res && res.error) {
+      state.pendingAgentEl.classList.remove('thinking');
+      state.pendingAgentEl.innerHTML = `<div class="bubble-content" style="color:var(--err)">Error: ${escapeHtml(res.error.message)}</div>`;
+      state.currentMessages.push({ role: 'assistant', content: `[Claude error: ${res.error.message}]`, model: res.model || 'claude' });
+    } else {
+      // 5. Re-identify placeholders in the streamed text and re-render the
+      //    bubble with the real names back.
+      const raw = state.pendingAgentText || res.text || '';
+      const filled = reidentifyWithMap(raw, map);
+      const contentEl = state.pendingAgentEl.querySelector('.bubble-content');
+      if (contentEl) contentEl.textContent = filled.text;
+      const reidentNote = state.pendingAgentEl.querySelector('.via-claude-note');
+      if (reidentNote && filled.count > 0) {
+        reidentNote.textContent = `via ${res.model || 'Claude'} · ${filled.count} name(s) re-identified locally`;
+      }
+      state.currentMessages.push({ role: 'assistant', content: filled.text, model: res.model || 'claude' });
+    }
+    // 6. Persist the chat with the model tag preserved.
+    const saved = await window.bones.chatSave({ id: state.currentChatId, messages: state.currentMessages });
+    if (saved && saved.id) state.currentChatId = saved.id;
+    refreshChatList();
+  } catch (err) {
+    state.pendingAgentEl.classList.remove('thinking');
+    state.pendingAgentEl.innerHTML = `<div class="bubble-content" style="color:var(--err)">Error: ${escapeHtml(err.message)}</div>`;
+  } finally {
+    if (state.pendingAgentEl) {
+      const m = state.pendingAgentEl.querySelector('.streaming-meter');
+      if (m) m.remove();
+    }
+    state.currentRunId = null;
+    state.tokenSink = null;
+    state.pendingAgentEl = null;
+    state.pendingAgentText = '';
+    state.askClaudeMap = null;
+    $('#btn-chat-send').disabled = false;
+    $('#btn-chat-ask-claude').disabled = false;
+    $('#btn-chat-cancel').hidden = true;
+  }
+}
+
+// Re-identify against a specific map (caller-supplied), without touching state.
+function reidentifyWithMap(text, map) {
+  let count = 0;
+  const seen = new Set();
+  const out = text.replace(/\[([A-Z]+_\d+)\]/g, (full) => {
+    const real = map[full];
+    if (real == null) return full;
+    if (!seen.has(full)) { seen.add(full); count++; }
+    return real;
+  });
+  return { text: out, count };
+}
+
+// Recover a multi-turn messages array from a "User: …\n\nAssistant: …"
+// transcript. Robust to extra blank lines and to assistant messages that
+// span paragraphs.
+function splitTranscriptToMessages(transcript) {
+  const lines = transcript.split('\n');
+  const out = [];
+  let role = null;
+  let buf = [];
+  const flush = () => {
+    if (role && buf.length) {
+      const content = buf.join('\n').trim();
+      if (content) out.push({ role, content });
+    }
+    buf = [];
+  };
+  for (const line of lines) {
+    const um = line.match(/^User:\s*(.*)$/);
+    const am = line.match(/^Assistant:\s*(.*)$/);
+    if (um) { flush(); role = 'user'; buf.push(um[1]); }
+    else if (am) { flush(); role = 'assistant'; buf.push(am[1]); }
+    else { buf.push(line); }
+  }
+  flush();
+  // Claude requires the last message to be from the user; if the transcript
+  // ends with an assistant message (shouldn't happen for chat flows), fall
+  // through and trust the API to reject it with a clear error.
+  return out;
+}
 
 // Streaming counters: shared state across whichever bubble/output is live.
 const streamMeter = { startedAt: 0, tokens: 0 };
@@ -366,17 +561,22 @@ function resetStreamMeter() { streamMeter.startedAt = 0; streamMeter.tokens = 0;
 // Token stream for both chat and work runs
 window.bones.onToken(({ runId, delta }) => {
   if (runId !== state.currentRunId) return;
-  // Chat path
+  // Chat path (local model OR Ask Claude)
   if (state.pendingAgentEl) {
+    const isClaude = state.pendingAgentEl.classList.contains('via-claude');
     if (state.pendingAgentEl.classList.contains('thinking')) {
       state.pendingAgentEl.classList.remove('thinking');
-      // Preserve the streaming-meter element while swapping the body markup.
-      state.pendingAgentEl.innerHTML = `${skullSvg('skull-spin')}<div class="bubble-content"></div><div class="streaming-meter"></div>`;
+      const subtitle = isClaude ? '<div class="via-claude-note">via Claude · redacted in flight</div>' : '';
+      state.pendingAgentEl.innerHTML = `${skullSvg('skull-spin')}<div class="bubble-content"></div>${subtitle}<div class="streaming-meter"></div>`;
     }
     state.pendingAgentText += delta;
     const c = state.pendingAgentEl.querySelector('.bubble-content');
-    if (c) c.textContent = state.pendingAgentText;
-    bumpStreamMeter(state.pendingAgentEl.querySelector('.streaming-meter'), 'generating');
+    // For Ask Claude, re-identify placeholders in the streaming text live so
+    // the user sees real names appear progressively rather than [PERSON_1].
+    if (c) c.textContent = isClaude && state.askClaudeMap
+      ? reidentifyWithMap(state.pendingAgentText, state.askClaudeMap).text
+      : state.pendingAgentText;
+    bumpStreamMeter(state.pendingAgentEl.querySelector('.streaming-meter'), isClaude ? 'Claude' : 'generating');
     const root = $('#chat-messages');
     root.scrollTop = root.scrollHeight;
     return;
@@ -2048,3 +2248,4 @@ populateSetupCard();
 setAboutVersion();
 renderFilesSummary();
 renderAbsorbFilesSummary();
+refreshContextMeter();

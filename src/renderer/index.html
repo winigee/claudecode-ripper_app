@@ -82,6 +82,12 @@
 
       <!-- Chat tab -->
       <section id="tab-chat" class="tab-panel active">
+        <div id="chat-context-meter" class="context-meter" hidden>
+          <div class="ctx-bar"><div class="ctx-fill"></div></div>
+          <div class="ctx-text">
+            <span id="ctx-tokens">0</span> / <span id="ctx-limit">16,384</span> tokens · <span id="ctx-state">fresh</span>
+          </div>
+        </div>
         <div id="chat-messages" class="chat-messages">
           <div class="chat-empty muted">
             <svg class="skull-static" viewBox="0 0 100 100" width="120" height="120">
@@ -91,9 +97,10 @@
           </div>
         </div>
         <form id="chat-form" class="chat-form">
-          <textarea id="chat-input" placeholder="Ask BonesAI… (⌘↩ to send)" rows="2"></textarea>
+          <textarea id="chat-input" placeholder="Ask BonesAI… (⌘↩ to send · ⌘⇧↩ to ask Claude)" rows="2"></textarea>
           <div class="chat-form-row">
             <button type="button" id="btn-chat-cancel" hidden>Cancel</button>
+            <button type="button" id="btn-chat-ask-claude" title="Anonymise the conversation, send to Claude, re-identify the reply">Ask Claude →</button>
             <button type="submit" id="btn-chat-send" class="primary">Send</button>
           </div>
         </form>
