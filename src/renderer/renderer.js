@@ -50,38 +50,22 @@ $$('.tab').forEach((btn) => {
 });
 
 // ----- Settings sub-nav -----
-// Pills at the top of Settings scroll to each section so the user doesn't
-// have to wheel through the whole page. Active state follows whatever
-// section is closest to the top of the visible area.
+// Tab-style: clicking a pill swaps which Settings card is visible. Only one
+// card on screen at a time, no scrolling through the stack.
 function setupSettingsSubnav() {
   const nav = document.getElementById('settings-subnav');
   if (!nav) return;
-  const panel = document.getElementById('tab-settings');
-  if (!panel) return;
   nav.addEventListener('click', (e) => {
     const btn = e.target.closest('.snav');
     if (!btn) return;
-    const target = document.getElementById(btn.dataset.jump);
-    if (!target) return;
-    // Account for the sticky subnav height so the target isn't hidden under it.
-    const subnavH = nav.getBoundingClientRect().height + 8;
-    const top = target.offsetTop - panel.offsetTop - subnavH;
-    panel.scrollTo({ top, behavior: 'smooth' });
-  });
-
-  // Track scroll to highlight the section nearest the top of the viewport.
-  const ids = Array.from(nav.querySelectorAll('.snav')).map((b) => b.dataset.jump);
-  panel.addEventListener('scroll', () => {
-    let active = ids[0];
-    const subnavH = nav.getBoundingClientRect().height + 8;
-    const probe = panel.scrollTop + subnavH + 20;
-    for (const id of ids) {
-      const el = document.getElementById(id);
-      if (!el) continue;
-      if (el.offsetTop - panel.offsetTop <= probe) active = id;
-    }
+    const targetId = btn.dataset.jump;
+    // Highlight the clicked pill
     nav.querySelectorAll('.snav').forEach((b) => {
-      b.classList.toggle('active', b.dataset.jump === active);
+      b.classList.toggle('active', b === btn);
+    });
+    // Show only the matching card
+    document.querySelectorAll('#tab-settings .setting').forEach((s) => {
+      s.classList.toggle('active', s.id === targetId);
     });
   });
 }

@@ -867,7 +867,10 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   border-color: var(--accent);
 }
 
-#tab-settings { scroll-padding-top: 56px; }
+/* Settings is now tab-style: only the card matching the active sub-nav pill
+   is shown. No more vertical scrolling through the whole stack. */
+#tab-settings .setting { display: none; }
+#tab-settings .setting.active { display: block; }
 
 /* --- Shared memory --- */
 .memory-add-row { gap: 8px; }
