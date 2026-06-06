@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('bones', {
   modelHardware: () => ipcRenderer.invoke('model:hardware'),
   modelSetActive: (id) => ipcRenderer.invoke('model:set-active', id),
   modelCancel: () => ipcRenderer.invoke('model:cancel'),
+  openModelsFolder: () => ipcRenderer.invoke('model:open-folder'),
   onModelProgress: (cb) => ipcRenderer.on('model:progress', (_e, p) => cb(p)),
 
   // Runtime tuning

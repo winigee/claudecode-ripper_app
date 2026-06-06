@@ -1176,11 +1176,21 @@ async function refreshModelList() {
       actions.push(`<button class="btn-delete-model" data-id="${m.id}">Delete</button>`);
     }
 
+    let installedNote = '';
+    if (m.installed && m.installedPath) {
+      const fname = m.installedPath.split('/').pop();
+      // Show a small "detected" line for user-dropped files (different name
+      // than canonical) so it's obvious BonesAI found the manually-added file.
+      if (fname !== m.filename) {
+        installedNote = `<div class="meta installed-note">Detected file: <code>${escapeHtml(fname)}</code></div>`;
+      }
+    }
     card.innerHTML = `
       <div class="info">
         <div class="title">${escapeHtml(m.name)} ${badges.join(' ')}</div>
         <div class="meta">${escapeHtml(m.short)} · ${m.sizeLabel} · needs ≥${m.minRamGB} GB RAM</div>
         <div class="notes">${escapeHtml(m.notes)}</div>
+        ${installedNote}
         <div class="progress"><div class="fill"></div></div>
       </div>
       <div class="actions">${actions.join('')}</div>
@@ -1206,6 +1216,20 @@ async function refreshModelList() {
       refreshSettings();
     })
   );
+}
+
+// Manual "I just dropped a file in the folder, find it" button.
+if (document.getElementById('btn-rescan-models')) {
+  $('#btn-rescan-models').addEventListener('click', async () => {
+    setStatus('rescanning…', 'warn');
+    await refreshModelList();
+    setStatus('rescan complete', 'ok');
+  });
+  $('#btn-open-models-folder').addEventListener('click', async () => {
+    if (window.bones.openModelsFolder) {
+      await window.bones.openModelsFolder();
+    }
+  });
 }
 
 async function downloadModelAndUI(modelId) {

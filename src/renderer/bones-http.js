@@ -118,6 +118,7 @@
     modelHardware: () => GET('/api/models/hardware').catch(() => ({})),
     modelSetActive: async () => ({ error: 'Model management is only available on the host Mac.' }),
     modelCancel: () => ({ ok: true }),
+    openModelsFolder: async () => ({ error: 'host only' }),
     onModelProgress: () => {},
 
     // Runtime tuning — host only

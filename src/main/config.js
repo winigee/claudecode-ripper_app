@@ -176,24 +176,66 @@ function recommendModelId() {
 }
 
 // --- Installed-model checks ---
+//
+// We want two flows to both work:
+//   1. The in-app downloader writes to the canonical filename (m.filename) in
+//      the models dir. Simple, one exact path.
+//   2. The user downloads a .gguf manually from HuggingFace and drops it in
+//      the models folder. The filename varies wildly across uploaders
+//      (Saul-7B-Instruct-v1.Q4_K_M.gguf vs saul-7b-instruct-v1-q4_k_m.gguf
+//      vs mobeetle's repo conventions, etc).
+//
+// So: first try the canonical path; if nothing's there, scan the folder for
+// any .gguf whose lowercased name contains all the distinguishing tokens of
+// the model id (e.g. ["saul", "7b"] for saul-7b). Returns the real on-disk
+// path so llama-server gets pointed at whatever's actually there.
+
+function modelMatchTokens(id) {
+  return String(id).toLowerCase()
+    .split(/[-_.]/)
+    .filter((t) => t.length >= 2);
+}
+
+function findInstalledFile(id) {
+  const m = findModel(id);
+  if (!m) return null;
+  // 1. Canonical filename
+  const canonical = path.join(modelsDir(), m.filename);
+  try {
+    const st = fs.statSync(canonical);
+    if (st.size > m.minBytes) return canonical;
+  } catch (_) {}
+  // 2. Scan for any .gguf containing all the id tokens, big enough
+  const tokens = modelMatchTokens(id);
+  let entries;
+  try { entries = fs.readdirSync(modelsDir()); } catch (_) { return null; }
+  for (const name of entries) {
+    if (!name.toLowerCase().endsWith('.gguf')) continue;
+    const lc = name.toLowerCase();
+    if (!tokens.every((t) => lc.includes(t))) continue;
+    const full = path.join(modelsDir(), name);
+    try {
+      const st = fs.statSync(full);
+      if (st.size > m.minBytes) return full;
+    } catch (_) {}
+  }
+  return null;
+}
 
 function isModelInstalled(id) {
-  const m = findModel(id);
-  if (!m) return false;
-  try {
-    const st = fs.statSync(modelPath(id));
-    return st.size > m.minBytes;
-  } catch (_) {
-    return false;
-  }
+  return !!findInstalledFile(id);
 }
 
 function listModels() {
-  return MODELS.map((m) => ({
-    ...m,
-    installed: isModelInstalled(m.id),
-    path: modelPath(m.id),
-  }));
+  return MODELS.map((m) => {
+    const installedPath = findInstalledFile(m.id);
+    return {
+      ...m,
+      installed: !!installedPath,
+      path: installedPath || modelPath(m.id),
+      installedPath, // null if not installed; differs from canonical when user dropped a file
+    };
+  });
 }
 
 // --- Active model: which is currently selected ---
@@ -218,7 +260,8 @@ function setActiveModelId(id) {
 // --- Convenience for legacy callers ---
 
 function activeModelPath() {
-  return modelPath(getActiveModelId());
+  const id = getActiveModelId();
+  return findInstalledFile(id) || modelPath(id);
 }
 function modelInstalled() {
   return isModelInstalled(getActiveModelId());
@@ -251,6 +294,7 @@ module.exports = {
   llamafileInstalled,
   listModels,
   findModel,
+  findInstalledFile,
   getActiveModelId,
   setActiveModelId,
   isModelInstalled,

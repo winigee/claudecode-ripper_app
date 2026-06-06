@@ -135,8 +135,16 @@ async function downloadModel(modelId, onProgress) {
 async function deleteModel(modelId) {
   const m = config.findModel(modelId);
   if (!m) return { error: 'Unknown model id' };
+  // Delete whatever file is actually serving this model — could be the
+  // canonical filename or a user-dropped one.
+  const actual = config.activeModelPathFor
+    ? config.activeModelPathFor(modelId)
+    : null;
+  const target = (typeof config.findInstalledFile === 'function'
+    ? config.findInstalledFile(modelId)
+    : null) || config.modelPath(modelId);
   try {
-    fs.unlinkSync(config.modelPath(modelId));
+    fs.unlinkSync(target);
     return { ok: true };
   } catch (err) {
     if (err.code === 'ENOENT') return { ok: true };

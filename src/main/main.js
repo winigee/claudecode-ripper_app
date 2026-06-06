@@ -198,6 +198,13 @@ ipcMain.handle('model:set-active', async (event, modelId) => {
 
 ipcMain.handle('model:cancel', () => modelDownload.cancelDownload());
 
+// Open the models folder in Finder so the user can drop a manually-downloaded
+// .gguf there without typing the long Application Support path.
+ipcMain.handle('model:open-folder', () => {
+  try { shell.openPath(config.modelsDir()); return { ok: true }; }
+  catch (e) { return { error: e.message }; }
+});
+
 // --- Runtime tuning (context window) ---
 ipcMain.handle('runtime:get', () => ({
   context: config.getContext(),
