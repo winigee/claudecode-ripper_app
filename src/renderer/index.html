@@ -195,6 +195,17 @@
       <section id="tab-settings" class="tab-panel">
         <h2>Settings</h2>
 
+        <nav class="settings-subnav" id="settings-subnav">
+          <button data-jump="setting-memory" class="snav active">Memory</button>
+          <button data-jump="setting-model" class="snav">Model</button>
+          <button data-jump="setting-perf" class="snav">Performance</button>
+          <button data-jump="setting-models-list" class="snav">Models</button>
+          <button data-jump="setting-api" class="snav">Claude API</button>
+          <button data-jump="setting-sharing" class="snav">Sharing</button>
+          <button data-jump="setting-diag" class="snav">Diagnostics</button>
+          <button data-jump="setting-about" class="snav">About</button>
+        </nav>
+
         <div class="setting" id="setting-memory">
           <label>Memory <span class="muted" style="text-transform:none;letter-spacing:0;font-size:11px">— shared across every local model</span></label>
           <p class="hint">Teach Bones facts, preferences, or standing instructions. These are added to every local model’s context, so whatever you teach one model, they all remember. (Local models only — not sent to Claude.)</p>
@@ -210,7 +221,7 @@
           <p class="hint" id="memory-location"></p>
         </div>
 
-        <div class="setting">
+        <div class="setting" id="setting-model">
           <label>Local model</label>
           <p class="hint" id="model-state">Checking…</p>
           <div class="row">
@@ -275,7 +286,7 @@
           <p class="hint">Tip: install Tailscale on this Mac and your iPhone (free, https://tailscale.com), then use the Tailscale URL above to access BonesAI from anywhere over the encrypted mesh.</p>
         </div>
 
-        <div class="setting">
+        <div class="setting" id="setting-models-list">
           <label>Available models</label>
           <p class="hint" id="hw-summary">Detecting hardware…</p>
           <div class="row">
@@ -285,8 +296,8 @@
           <div id="model-list" class="model-list"></div>
         </div>
 
-        <div class="setting">
-          <label>About BonesAI v2.7.2</label>
+        <div class="setting" id="setting-about">
+          <label>About BonesAI v2.7.3</label>
           <p class="hint">
             <strong>Local-first.</strong> Inference, search, and redaction all run on this Mac via
             llamafile + a local model. The one exception is “Send to Claude”, which reaches the
@@ -306,10 +317,13 @@
           </p>
         </div>
 
-        <div class="setting">
+        <div class="setting" id="setting-diag">
           <label>Diagnostics</label>
           <pre id="diag-log" class="diag"></pre>
-          <button id="btn-refresh-log">Refresh log</button>
+          <div class="row">
+            <button id="btn-refresh-log">Refresh log</button>
+            <button id="btn-export-log">Export log…</button>
+          </div>
         </div>
       </section>
     </main>

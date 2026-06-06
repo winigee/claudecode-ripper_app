@@ -49,6 +49,44 @@ $$('.tab').forEach((btn) => {
   btn.addEventListener('click', () => activateTab(btn.dataset.tab));
 });
 
+// ----- Settings sub-nav -----
+// Pills at the top of Settings scroll to each section so the user doesn't
+// have to wheel through the whole page. Active state follows whatever
+// section is closest to the top of the visible area.
+function setupSettingsSubnav() {
+  const nav = document.getElementById('settings-subnav');
+  if (!nav) return;
+  const panel = document.getElementById('tab-settings');
+  if (!panel) return;
+  nav.addEventListener('click', (e) => {
+    const btn = e.target.closest('.snav');
+    if (!btn) return;
+    const target = document.getElementById(btn.dataset.jump);
+    if (!target) return;
+    // Account for the sticky subnav height so the target isn't hidden under it.
+    const subnavH = nav.getBoundingClientRect().height + 8;
+    const top = target.offsetTop - panel.offsetTop - subnavH;
+    panel.scrollTo({ top, behavior: 'smooth' });
+  });
+
+  // Track scroll to highlight the section nearest the top of the viewport.
+  const ids = Array.from(nav.querySelectorAll('.snav')).map((b) => b.dataset.jump);
+  panel.addEventListener('scroll', () => {
+    let active = ids[0];
+    const subnavH = nav.getBoundingClientRect().height + 8;
+    const probe = panel.scrollTop + subnavH + 20;
+    for (const id of ids) {
+      const el = document.getElementById(id);
+      if (!el) continue;
+      if (el.offsetTop - panel.offsetTop <= probe) active = id;
+    }
+    nav.querySelectorAll('.snav').forEach((b) => {
+      b.classList.toggle('active', b.dataset.jump === active);
+    });
+  });
+}
+setupSettingsSubnav();
+
 // ----- Mobile sidebar toggle -----
 const sidebarToggleBtn = document.getElementById('sidebar-toggle');
 if (sidebarToggleBtn) {
@@ -1278,6 +1316,14 @@ async function refreshLog() {
   $('#diag-log').textContent = (tail || []).join('\n') || '(no log yet)';
 }
 $('#btn-refresh-log').addEventListener('click', refreshLog);
+$('#btn-export-log').addEventListener('click', async () => {
+  if (!window.bones.serverExportLog) return;
+  const res = await window.bones.serverExportLog();
+  if (!res) return;
+  if (res.cancelled) return;
+  if (res.error) { setStatus('export failed: ' + res.error, 'err'); return; }
+  setStatus('log exported', 'ok');
+});
 
 $('#btn-test').addEventListener('click', async () => {
   setStatus('pinging…', 'warn');

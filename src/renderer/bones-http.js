@@ -108,6 +108,7 @@
     serverStatus: () => GET('/api/server/status'),
     serverStart: () => POST('/api/server/start', {}),
     serverLogTail: () => GET('/api/server/log').catch(() => []),
+    serverExportLog: async () => ({ error: 'host only' }),
     onServerStatus: () => {}, // no live push over HTTP in v2.2.0
 
     // models — read-only over web for now

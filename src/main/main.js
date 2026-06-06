@@ -148,6 +148,55 @@ ipcMain.handle('server:start', async () => {
 
 ipcMain.handle('server:log-tail', () => llamaServer.tail());
 
+// Save the current llama-server log to a file the user picks, so they can
+// send it for diagnostics. Writes both the persistent log file (everything
+// since llamafile first ran) and a header with system info.
+ipcMain.handle('server:export-log', async () => {
+  const fs = require('fs');
+  const os = require('os');
+  const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const defaultName = `bonesai-log-${stamp}.txt`;
+  const result = await dialog.showSaveDialog(mainWindow, {
+    title: 'Export diagnostic log',
+    defaultPath: defaultName,
+    filters: [{ name: 'Text', extensions: ['txt'] }],
+  });
+  if (result.canceled || !result.filePath) return { cancelled: true };
+
+  const status = llamaServer.status();
+  const header = [
+    `BonesAI diagnostic log`,
+    `Exported: ${new Date().toISOString()}`,
+    `App: ${app.getName()} ${app.getVersion()}`,
+    `Platform: ${process.platform} ${process.arch} · Node ${process.versions.node} · Electron ${process.versions.electron}`,
+    `OS: ${os.type()} ${os.release()}`,
+    `Hardware: ${os.cpus().length} CPU thread(s) · ${Math.round(os.totalmem() / 1024 ** 3)} GB RAM`,
+    `Active model: ${status.activeModelId}`,
+    `Model path: ${status.modelPath}`,
+    `llamafile binary: ${status.binary}`,
+    `Server ready: ${status.ready} · port ${status.port}`,
+    `Last server error: ${status.error ? status.error.message : '(none)'}`,
+    `Runtime: context=${status.runtime?.context} threads=${status.runtime?.threads}`,
+    `---- llama-server.log (full file follows) ----`,
+    '',
+  ].join('\n');
+
+  let body = '';
+  try {
+    body = fs.readFileSync(status.logFilePath, 'utf8');
+  } catch (e) {
+    body = `(could not read log file at ${status.logFilePath}: ${e.message})\n\n`
+      + 'In-memory tail follows:\n\n'
+      + llamaServer.tail().join('\n');
+  }
+  try {
+    fs.writeFileSync(result.filePath, header + body);
+    return { ok: true, path: result.filePath };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
 ipcMain.handle('model:download', async (event) => {
   const send = (p) => {
     try { event.sender.send('model:progress', p); } catch (_) {}

@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('bones', {
   serverStatus: () => ipcRenderer.invoke('server:status'),
   serverStart: () => ipcRenderer.invoke('server:start'),
   serverLogTail: () => ipcRenderer.invoke('server:log-tail'),
+  serverExportLog: () => ipcRenderer.invoke('server:export-log'),
   onServerStatus: (cb) => ipcRenderer.on('server:status', (_e, s) => cb(s)),
   modelDownload: () => ipcRenderer.invoke('model:download'),
   modelDownloadSpecific: (id) => ipcRenderer.invoke('model:download-specific', id),
