@@ -1223,10 +1223,11 @@ input[type=text]:focus, #paste-area:focus, select:focus {
 .context-meter.spent #ctx-state { color: var(--err); font-weight: 700; }
 
 /* Ask Claude — distinct bubble styling so the user always knows when a chat
-   reply came from the API path vs the local model. */
+   reply came from the API path vs the local model. Uses Claude's brand
+   orange / coral hues so it reads as "this came from Claude". */
 .bubble.agent.via-claude {
-  background: linear-gradient(135deg, var(--bubble-agent), rgba(206, 156, 255, 0.08));
-  border-left: 2px solid #ce9cff;
+  background: linear-gradient(135deg, var(--bubble-agent), rgba(217, 119, 87, 0.10));
+  border-left: 2px solid #d97757;
 }
 .bubble .via-claude-note {
   margin-top: 6px;
@@ -1237,18 +1238,18 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   font-weight: 600;
 }
 .bubble.via-claude .via-claude-note {
-  color: #b87cff;
+  color: #e89d70;
 }
 
 #btn-chat-ask-claude {
   background: var(--bg-3);
-  border: 1px solid #6f3fb5;
-  color: #ce9cff;
+  border: 1px solid #c2603c;
+  color: #e89d70;
   font-weight: 600;
 }
 #btn-chat-ask-claude:hover:not(:disabled) {
-  background: #2a1747;
-  border-color: #8a4fd6;
+  background: #2a1a10;
+  border-color: #d97757;
 }
 #btn-chat-ask-claude:disabled { opacity: 0.5; cursor: not-allowed; }
 
