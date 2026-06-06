@@ -16,7 +16,10 @@ const state = {
   pendingAgentText: '',
   // Token routing for non-chat streams
   tokenSink: null, // 'cannon' | null
-  // Absorb (review modal staging)
+  // Absorb — its own dedicated file list separate from Work's, plus the
+  // staging shape for the review modal.
+  absorbFiles: [],
+  absorbSkipped: [],
   absorbDocs: [],   // [{ name, facts: [{ text, picked }] }]
   // Cannon
   redactedText: '',
@@ -592,6 +595,9 @@ $('#search-query').addEventListener('keydown', (e) => {
 });
 
 // ===== ABSORB =====
+// Absorb has its own top-level tab with its own dropzone and file list,
+// independent of Work. Drop files here → extract facts → review → save to
+// Memory.
 
 const ABSORB_LABELS = {
   file: (p) => `Reading file ${p.index}/${p.of}: ${p.file}…`,
@@ -612,10 +618,125 @@ if (window.bones.onAbsorbProgress) {
   });
 }
 
+// --- Absorb dropzone + file list ---
+
+const absorbDropzone = $('#absorb-dropzone');
+if (absorbDropzone) {
+  ['dragenter', 'dragover'].forEach((evt) => {
+    absorbDropzone.addEventListener(evt, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      absorbDropzone.classList.add('dragover');
+    });
+  });
+  ['dragleave', 'drop'].forEach((evt) => {
+    absorbDropzone.addEventListener(evt, (e) => {
+      e.preventDefault(); e.stopPropagation();
+      absorbDropzone.classList.remove('dragover');
+    });
+  });
+  absorbDropzone.addEventListener('drop', async (e) => {
+    const dt = e.dataTransfer;
+    if (!dt || !dt.files) return;
+    const paths = [];
+    for (const f of dt.files) if (f.path) paths.push(f.path);
+    if (paths.length === 0) return;
+    await ingestAbsorb(paths);
+  });
+}
+
+$('#btn-absorb-pick-files')?.addEventListener('click', async () => {
+  applyAbsorbIngest(await window.bones.pickFiles());
+});
+$('#btn-absorb-pick-folder')?.addEventListener('click', async () => {
+  applyAbsorbIngest(await window.bones.pickFolder());
+});
+$('#btn-absorb-clear')?.addEventListener('click', () => {
+  state.absorbFiles = [];
+  state.absorbSkipped = [];
+  renderAbsorbFilesSummary();
+});
+
+async function ingestAbsorb(paths) {
+  setStatus('reading files…', 'warn');
+  const res = await window.bones.ingestPaths(paths);
+  if (res && res.error) { setStatus('ingest error: ' + res.error.message, 'err'); return; }
+  applyAbsorbIngest(res);
+}
+function applyAbsorbIngest(res) {
+  if (!res) return;
+  state.absorbFiles = (res.files || []).concat(state.absorbFiles);
+  state.absorbSkipped = (res.skipped || []).concat(state.absorbSkipped);
+  renderAbsorbFilesSummary();
+}
+function fmtBytes(n) {
+  if (n == null) return '';
+  if (n < 1024) return n + ' B';
+  if (n < 1024 * 1024) return (n / 1024).toFixed(0) + ' KB';
+  return (n / 1024 / 1024).toFixed(1) + ' MB';
+}
+function fileKindIcon(kind) {
+  // Lightweight inline SVG. All three glyphs share the same "page" outline so
+  // the list reads as a tidy column. Kind label sits on a chip beside the name.
+  const base = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>';
+  return `<svg class="file-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${base}</svg>`;
+}
+function renderAbsorbFilesSummary() {
+  const el = $('#absorb-files-summary');
+  if (!el) return;
+  if (state.absorbFiles.length === 0 && state.absorbSkipped.length === 0) {
+    el.innerHTML = `<div class="files-card empty">No files loaded yet. Drag them onto the dropzone above, or use <strong>Pick files…</strong>.</div>`;
+    return;
+  }
+  const totalChars = state.absorbFiles.reduce((n, f) => n + (f.text ? f.text.length : 0), 0);
+  const tokenEst = Math.round(totalChars / 4); // very rough
+  let html = '<div class="files-card">';
+  html += `<div class="files-card-head">
+    <div class="files-card-title"><strong>${state.absorbFiles.length}</strong> file${state.absorbFiles.length === 1 ? '' : 's'} loaded</div>
+    <div class="files-card-stats muted">${totalChars.toLocaleString()} chars · ~${tokenEst.toLocaleString()} tokens</div>
+  </div>`;
+  html += '<ul class="files-list">';
+  for (const f of state.absorbFiles.slice(0, 30)) {
+    const name = f.name || f.path || '(unnamed)';
+    const kind = (f.kind || '').toUpperCase();
+    const size = fmtBytes(f.bytes);
+    html += `<li class="file-row">
+      <span class="file-row-icon">${fileKindIcon(f.kind)}</span>
+      <span class="file-row-name" title="${escapeHtml(f.path || name)}">${escapeHtml(name)}</span>
+      <span class="file-row-meta">
+        ${kind ? `<span class="kind-chip">${escapeHtml(kind)}</span>` : ''}
+        <span class="file-row-size">${size}</span>
+      </span>
+      <button class="file-row-del" data-path="${escapeHtml(f.path || name)}" aria-label="Remove">×</button>
+    </li>`;
+  }
+  if (state.absorbFiles.length > 30) {
+    html += `<li class="file-row more muted">…and ${state.absorbFiles.length - 30} more not shown</li>`;
+  }
+  html += '</ul>';
+  if (state.absorbSkipped.length > 0) {
+    html += '<div class="files-skipped">';
+    html += `<div class="files-skipped-head muted">${state.absorbSkipped.length} skipped:</div>`;
+    for (const s of state.absorbSkipped.slice(0, 10)) {
+      html += `<div class="files-skipped-row muted">${escapeHtml(s.path || '?')} — ${escapeHtml(s.reason || '')}</div>`;
+    }
+    html += '</div>';
+  }
+  html += '</div>';
+  el.innerHTML = html;
+  // Wire per-row remove buttons.
+  el.querySelectorAll('.file-row-del').forEach((b) => {
+    b.addEventListener('click', () => {
+      const p = b.dataset.path;
+      state.absorbFiles = state.absorbFiles.filter((f) => (f.path || f.name) !== p);
+      renderAbsorbFilesSummary();
+    });
+  });
+}
+
 $('#btn-absorb').addEventListener('click', async () => {
   if (state.currentRunId) return;
   if (!state.serverReady) { setStatus('model not ready', 'err'); return; }
-  if (state.files.length === 0) {
+  if (state.absorbFiles.length === 0) {
     setStatus('drop or pick files first', 'err');
     return;
   }
@@ -625,7 +746,7 @@ $('#btn-absorb').addEventListener('click', async () => {
   $('#btn-absorb-cancel').hidden = false;
   setStatus('absorbing…', 'warn');
   try {
-    const payload = state.files.map((f) => ({ name: f.name || f.path, text: f.text || '' }));
+    const payload = state.absorbFiles.map((f) => ({ name: f.name || f.path, text: f.text || '' }));
     const res = await window.bones.absorbRun(payload, runId);
     if (res && res.error) {
       setStatus('absorb error: ' + (res.error.message || 'unknown'), 'err');
@@ -1497,3 +1618,4 @@ refreshStatus();
 refreshChatList();
 populateSetupCard();
 setAboutVersion();
+renderAbsorbFilesSummary();

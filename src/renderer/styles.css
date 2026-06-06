@@ -668,23 +668,142 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   margin: 18px 0;
 }
 
-/* --- Absorb --- */
-.absorb {
-  margin: 16px 0;
-  padding: 14px;
-  background: var(--bg-2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-}
-.absorb h3 {
-  margin: 0 0 4px;
-  font-size: 14px;
-  color: var(--accent);
-}
+/* --- Absorb tab --- */
 #btn-absorb {
   letter-spacing: 1px;
   font-weight: 700;
 }
+.absorb-tip {
+  margin-top: 18px;
+  padding: 10px 14px;
+  background: var(--bg-2);
+  border-left: 3px solid var(--accent-dim);
+  border-radius: 0 4px 4px 0;
+  font-style: italic;
+}
+
+/* --- Loaded files card (used by Absorb; reusable) --- */
+.files-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin: 14px 0;
+  overflow: hidden;
+}
+.files-card.empty {
+  padding: 18px 16px;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  text-align: center;
+  border-style: dashed;
+}
+.files-card-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-3);
+}
+.files-card-title {
+  font-size: 13px;
+  color: var(--text);
+}
+.files-card-title strong {
+  color: var(--accent);
+  font-size: 15px;
+  margin-right: 3px;
+}
+.files-card-stats {
+  font-size: 11.5px;
+}
+.files-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.file-row {
+  display: grid;
+  grid-template-columns: 22px 1fr auto 24px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  color: var(--text);
+  border-top: 1px solid transparent;
+  border-bottom: 1px solid transparent;
+}
+.file-row:hover {
+  background: var(--bg-3);
+  border-top-color: var(--border);
+  border-bottom-color: var(--border);
+}
+.file-row.more { grid-template-columns: 1fr; padding: 10px 14px; }
+.file-row-icon { color: var(--accent); display: flex; align-items: center; }
+.file-row-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-row-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-dim);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.kind-chip {
+  background: var(--accent-dim);
+  color: var(--bg);
+  font-weight: 700;
+  font-size: 9.5px;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.file-row-size { color: var(--text-dim); }
+.file-row-del {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  min-height: 0;
+  opacity: 0;
+  transition: opacity 0.1s, color 0.1s;
+}
+.file-row:hover .file-row-del { opacity: 1; }
+.file-row-del:hover { color: var(--err); }
+.files-skipped {
+  border-top: 1px solid var(--border);
+  padding: 8px 14px;
+  background: rgba(255, 123, 123, 0.04);
+}
+.files-skipped-head { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; }
+.files-skipped-row { font-size: 11.5px; padding-top: 2px; }
+
+/* Reuse the same dropzone visual the Work tab uses */
+#absorb-dropzone {
+  border: 1.5px dashed var(--border-hi);
+  border-radius: 6px;
+  padding: 18px;
+  text-align: center;
+  background: var(--bg-2);
+  margin: 14px 0;
+  transition: border-color 0.15s, background 0.15s;
+}
+#absorb-dropzone.dragover {
+  border-color: var(--accent);
+  background: rgba(76, 199, 255, 0.06);
+}
+#absorb-dropzone p { margin: 0 0 10px; color: var(--text-dim); font-size: 13px; }
+.dropzone-block .dz-buttons { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
 
 /* --- Generic modal --- */
 .modal {

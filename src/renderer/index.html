@@ -38,6 +38,7 @@
       <nav class="sidebar-nav">
         <button data-tab="chat" class="tab active">Chat</button>
         <button data-tab="work" class="tab">Work</button>
+        <button data-tab="absorb" class="tab">Absorb</button>
         <button data-tab="brain" class="tab">Brain</button>
         <button data-tab="settings" class="tab">Settings</button>
       </nav>
@@ -128,38 +129,6 @@
           <div id="search-results" class="search-results"></div>
         </div>
 
-        <!-- Absorb — extract knowledge from loaded files into Memory -->
-        <div class="absorb">
-          <h3>Absorb</h3>
-          <p class="hint">Have Bones read the loaded files and propose what's worth remembering. You pick which facts to keep — they go into Memory and apply to every future chat with any local model. Source filename is recorded so you can always trace what came from where.</p>
-          <div class="row">
-            <button id="btn-absorb" class="primary">Absorb loaded files</button>
-            <button id="btn-absorb-cancel" hidden>Cancel</button>
-          </div>
-          <div id="absorb-progress" class="search-progress muted" hidden></div>
-        </div>
-
-        <!-- Absorb review modal -->
-        <div id="absorb-modal" class="modal" hidden>
-          <div class="modal-card">
-            <div class="modal-head">
-              <h3>Review what Bones absorbed</h3>
-              <button id="btn-absorb-close" class="modal-close" aria-label="Close">×</button>
-            </div>
-            <p class="hint">Tick the facts to keep. Unticked ones are discarded. Saved facts apply to every local model and (if enabled) sync across your Macs via iCloud.</p>
-            <div class="modal-actions-top">
-              <button id="btn-absorb-all">Select all</button>
-              <button id="btn-absorb-none">Select none</button>
-              <span class="muted" id="absorb-counter"></span>
-            </div>
-            <div id="absorb-review" class="absorb-review"></div>
-            <div class="modal-actions">
-              <button id="btn-absorb-cancel-modal">Discard all</button>
-              <button id="btn-absorb-save" class="primary">Save selected to Memory</button>
-            </div>
-          </div>
-        </div>
-
         <!-- Redact & send to Claude (the cannon) -->
         <div class="cannon">
           <h3>Redact &amp; send to Claude</h3>
@@ -212,6 +181,32 @@
           <button id="btn-save-brain" disabled>Save to Brain</button>
         </div>
         <pre id="output"></pre>
+      </section>
+
+      <!-- Absorb tab — turn documents into Memory entries. -->
+      <section id="tab-absorb" class="tab-panel">
+        <h2>Absorb</h2>
+        <p class="hint">Drop documents — research notes, briefings, statutes, anything you want Bones to remember. The local model proposes facts; you tick which to keep. Saved facts go into Memory and apply to every future chat with any local model. Source filename is recorded with each entry.</p>
+
+        <div id="absorb-dropzone" class="dropzone-block">
+          <p>Drag files or a folder here, or pick them.</p>
+          <div class="dz-buttons">
+            <button id="btn-absorb-pick-files">Pick files…</button>
+            <button id="btn-absorb-pick-folder">Pick folder…</button>
+            <button id="btn-absorb-clear">Clear</button>
+          </div>
+        </div>
+        <div id="absorb-files-summary"></div>
+
+        <div class="row">
+          <button id="btn-absorb" class="primary">Absorb loaded files</button>
+          <button id="btn-absorb-cancel" hidden>Cancel</button>
+        </div>
+        <div id="absorb-progress" class="search-progress muted" hidden></div>
+
+        <p class="hint absorb-tip">
+          Not all documents make good Memory fodder. Research notes, principles, and reference material work well. Don't absorb live correspondence or one-off matter content — that's what the chat is for.
+        </p>
       </section>
 
       <!-- Brain tab -->
@@ -392,6 +387,14 @@
         </svg>
         <span>Work</span>
       </button>
+      <button data-tab="absorb" class="tab btab" aria-label="Absorb">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3v10"/>
+          <path d="M8 9l4 4 4-4"/>
+          <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
+        </svg>
+        <span>Absorb</span>
+      </button>
       <button data-tab="brain" class="tab btab" aria-label="Brain">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <path d="M9 4a3 3 0 0 0-3 3v0a3 3 0 0 0-2 5 3 3 0 0 0 0 4 3 3 0 0 0 3 4h2V4z"/>
@@ -407,6 +410,27 @@
         <span>Settings</span>
       </button>
     </nav>
+
+    <!-- Absorb review modal — body-level so it overlays from any tab. -->
+    <div id="absorb-modal" class="modal" hidden>
+      <div class="modal-card">
+        <div class="modal-head">
+          <h3>Review what Bones absorbed</h3>
+          <button id="btn-absorb-close" class="modal-close" aria-label="Close">×</button>
+        </div>
+        <p class="hint">Tick the facts to keep. Unticked ones are discarded. Saved facts apply to every local model and (if enabled) sync across your Macs via iCloud.</p>
+        <div class="modal-actions-top">
+          <button id="btn-absorb-all">Select all</button>
+          <button id="btn-absorb-none">Select none</button>
+          <span class="muted" id="absorb-counter"></span>
+        </div>
+        <div id="absorb-review" class="absorb-review"></div>
+        <div class="modal-actions">
+          <button id="btn-absorb-cancel-modal">Discard all</button>
+          <button id="btn-absorb-save" class="primary">Save selected to Memory</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Reusable inline SVG: skull-and-crossbones, line-art -->
     <svg width="0" height="0" style="position:absolute" aria-hidden="true">
