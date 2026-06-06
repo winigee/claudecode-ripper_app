@@ -407,18 +407,16 @@ function applyIngest(res) {
 }
 
 function renderFilesSummary() {
-  const el = $('#files-summary');
-  if (state.files.length === 0 && state.skipped.length === 0) { el.innerHTML = ''; return; }
-  const totalChars = state.files.reduce((n, f) => n + (f.text ? f.text.length : 0), 0);
-  let html = `<div><strong>${state.files.length} file(s)</strong> · ~${totalChars.toLocaleString()} chars</div>`;
-  for (const f of state.files.slice(0, 20)) {
-    html += `<div class="file">${escapeHtml(f.name || f.path)} <span class="muted">(${f.kind}, ${f.bytes} B)</span></div>`;
-  }
-  if (state.files.length > 20) html += `<div class="muted">…and ${state.files.length - 20} more</div>`;
-  for (const s of state.skipped.slice(0, 10)) {
-    html += `<div class="skip">skipped: ${escapeHtml(s.path)} — ${escapeHtml(s.reason || '')}</div>`;
-  }
-  el.innerHTML = html;
+  renderFilesCard({
+    container: $('#files-summary'),
+    files: state.files,
+    skipped: state.skipped,
+    emptyHint: 'No files loaded yet. Drag them onto the dropzone above, or use <strong>Pick files…</strong>.',
+    onRemove: (_f, i) => {
+      state.files.splice(i, 1);
+      renderFilesSummary();
+    },
+  });
 }
 
 $('#btn-summarise').addEventListener('click', () => run('summarise'));
@@ -680,56 +678,72 @@ function fileKindIcon(kind) {
   const base = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>';
   return `<svg class="file-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${base}</svg>`;
 }
-function renderAbsorbFilesSummary() {
-  const el = $('#absorb-files-summary');
-  if (!el) return;
-  if (state.absorbFiles.length === 0 && state.absorbSkipped.length === 0) {
-    el.innerHTML = `<div class="files-card empty">No files loaded yet. Drag them onto the dropzone above, or use <strong>Pick files…</strong>.</div>`;
+// Shared renderer for the loaded-files card. Both the Work and Absorb tabs use
+// this so the visual stays identical and any future tweak lands in one place.
+// `onRemove(file)` is called when the per-row × is clicked; the caller mutates
+// its own state and re-renders.
+function renderFilesCard({ container, files, skipped, emptyHint, onRemove }) {
+  if (!container) return;
+  if ((!files || files.length === 0) && (!skipped || skipped.length === 0)) {
+    container.innerHTML = `<div class="files-card empty">${emptyHint}</div>`;
     return;
   }
-  const totalChars = state.absorbFiles.reduce((n, f) => n + (f.text ? f.text.length : 0), 0);
+  const totalChars = files.reduce((n, f) => n + (f.text ? f.text.length : 0), 0);
   const tokenEst = Math.round(totalChars / 4); // very rough
   let html = '<div class="files-card">';
   html += `<div class="files-card-head">
-    <div class="files-card-title"><strong>${state.absorbFiles.length}</strong> file${state.absorbFiles.length === 1 ? '' : 's'} loaded</div>
+    <div class="files-card-title"><strong>${files.length}</strong> file${files.length === 1 ? '' : 's'} loaded</div>
     <div class="files-card-stats muted">${totalChars.toLocaleString()} chars · ~${tokenEst.toLocaleString()} tokens</div>
   </div>`;
   html += '<ul class="files-list">';
-  for (const f of state.absorbFiles.slice(0, 30)) {
+  files.slice(0, 30).forEach((f, i) => {
     const name = f.name || f.path || '(unnamed)';
     const kind = (f.kind || '').toUpperCase();
     const size = fmtBytes(f.bytes);
-    html += `<li class="file-row">
+    html += `<li class="file-row" data-idx="${i}">
       <span class="file-row-icon">${fileKindIcon(f.kind)}</span>
       <span class="file-row-name" title="${escapeHtml(f.path || name)}">${escapeHtml(name)}</span>
       <span class="file-row-meta">
         ${kind ? `<span class="kind-chip">${escapeHtml(kind)}</span>` : ''}
         <span class="file-row-size">${size}</span>
       </span>
-      <button class="file-row-del" data-path="${escapeHtml(f.path || name)}" aria-label="Remove">×</button>
+      <button class="file-row-del" data-idx="${i}" aria-label="Remove">×</button>
     </li>`;
-  }
-  if (state.absorbFiles.length > 30) {
-    html += `<li class="file-row more muted">…and ${state.absorbFiles.length - 30} more not shown</li>`;
+  });
+  if (files.length > 30) {
+    html += `<li class="file-row more muted">…and ${files.length - 30} more not shown</li>`;
   }
   html += '</ul>';
-  if (state.absorbSkipped.length > 0) {
+  if (skipped && skipped.length > 0) {
     html += '<div class="files-skipped">';
-    html += `<div class="files-skipped-head muted">${state.absorbSkipped.length} skipped:</div>`;
-    for (const s of state.absorbSkipped.slice(0, 10)) {
+    html += `<div class="files-skipped-head muted">${skipped.length} skipped:</div>`;
+    for (const s of skipped.slice(0, 10)) {
       html += `<div class="files-skipped-row muted">${escapeHtml(s.path || '?')} — ${escapeHtml(s.reason || '')}</div>`;
     }
     html += '</div>';
   }
   html += '</div>';
-  el.innerHTML = html;
-  // Wire per-row remove buttons.
-  el.querySelectorAll('.file-row-del').forEach((b) => {
-    b.addEventListener('click', () => {
-      const p = b.dataset.path;
-      state.absorbFiles = state.absorbFiles.filter((f) => (f.path || f.name) !== p);
-      renderAbsorbFilesSummary();
+  container.innerHTML = html;
+  if (onRemove) {
+    container.querySelectorAll('.file-row-del').forEach((b) => {
+      b.addEventListener('click', () => {
+        const i = Number(b.dataset.idx);
+        if (Number.isFinite(i) && files[i]) onRemove(files[i], i);
+      });
     });
+  }
+}
+
+function renderAbsorbFilesSummary() {
+  renderFilesCard({
+    container: $('#absorb-files-summary'),
+    files: state.absorbFiles,
+    skipped: state.absorbSkipped,
+    emptyHint: 'No files loaded yet. Drag them onto the dropzone above, or use <strong>Pick files…</strong>.',
+    onRemove: (_f, i) => {
+      state.absorbFiles.splice(i, 1);
+      renderAbsorbFilesSummary();
+    },
   });
 }
 
@@ -1618,4 +1632,5 @@ refreshStatus();
 refreshChatList();
 populateSetupCard();
 setAboutVersion();
+renderFilesSummary();
 renderAbsorbFilesSummary();
