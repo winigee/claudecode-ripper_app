@@ -135,4 +135,13 @@ async function render(svg, size, file) {
   // Also drop the stand-alone SVG for modern browsers that prefer it.
   fs.writeFileSync(path.join(OUT, 'icon.svg'), sq);
   console.log('  wrote icon.svg');
+
+  // macOS Finder/Dock/App Switcher icon. electron-builder looks for
+  // build/icon.png at 1024×1024 by default. Use the rounded-corner variant —
+  // pre–Big Sur macOS doesn't apply a mask, and on Sonoma it sits flush with
+  // other rounded icons in the Dock without looking off.
+  const BUILD = path.resolve(__dirname, '..', 'build');
+  fs.mkdirSync(BUILD, { recursive: true });
+  await sharp(Buffer.from(rd)).resize(1024, 1024).png().toFile(path.join(BUILD, 'icon.png'));
+  console.log('  wrote build/icon.png (1024x1024 — macOS app icon)');
 })();

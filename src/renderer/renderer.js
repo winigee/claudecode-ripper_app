@@ -398,9 +398,10 @@ async function ingestPaths(paths) {
   applyIngest(res);
 }
 
-function applyIngest(res) {
+async function applyIngest(res) {
   if (!res) return;
-  state.files = (res.files || []).concat(state.files);
+  const merged = await mergeWithDupCheck(state.files, res.files || [], 'Work');
+  state.files = merged.files;
   state.skipped = (res.skipped || []).concat(state.skipped);
   renderFilesSummary();
   refreshStatus();
@@ -660,9 +661,10 @@ async function ingestAbsorb(paths) {
   if (res && res.error) { setStatus('ingest error: ' + res.error.message, 'err'); return; }
   applyAbsorbIngest(res);
 }
-function applyAbsorbIngest(res) {
+async function applyAbsorbIngest(res) {
   if (!res) return;
-  state.absorbFiles = (res.files || []).concat(state.absorbFiles);
+  const merged = await mergeWithDupCheck(state.absorbFiles, res.files || [], 'Absorb');
+  state.absorbFiles = merged.files;
   state.absorbSkipped = (res.skipped || []).concat(state.absorbSkipped);
   renderAbsorbFilesSummary();
 }
@@ -678,6 +680,85 @@ function fileKindIcon(kind) {
   const base = '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/>';
   return `<svg class="file-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${base}</svg>`;
 }
+// Detect files that match something already loaded. Match is by full path if
+// available, otherwise by (name + byte size). Returns the duplicate names so
+// they can be listed in the conflict prompt.
+function findDuplicates(existing, incoming) {
+  const out = [];
+  for (const inc of incoming) {
+    const dup = existing.find((e) => {
+      if (inc.path && e.path && inc.path === e.path) return true;
+      if (!inc.path || !e.path) return false;
+      return (e.name === inc.name && e.bytes === inc.bytes);
+    });
+    if (dup) out.push({ incoming: inc, existing: dup });
+  }
+  return out;
+}
+
+// Ask the user how to resolve duplicates. Resolves to one of:
+//   'replace'    — drop the existing entries, add the incoming
+//   'keep-both'  — add the incoming alongside
+//   'cancel'     — drop the incoming, keep things as they are
+function promptDuplicateChoice(duplicates) {
+  return new Promise((resolve) => {
+    const modal = document.createElement('div');
+    modal.className = 'modal';
+    const names = duplicates.map((d) => d.incoming.name || d.incoming.path).slice(0, 6);
+    const extra = duplicates.length > 6 ? ` <span class="muted">…and ${duplicates.length - 6} more</span>` : '';
+    modal.innerHTML = `
+      <div class="modal-card modal-small">
+        <div class="modal-head">
+          <h3>${duplicates.length} duplicate file${duplicates.length === 1 ? '' : 's'}</h3>
+        </div>
+        <p class="hint">${duplicates.length === 1 ? 'This file is' : 'These files are'} already loaded:</p>
+        <ul class="dup-list">${names.map((n) => `<li>${escapeHtml(n)}</li>`).join('')}${extra ? `<li>${extra}</li>` : ''}</ul>
+        <p class="hint">How would you like to handle ${duplicates.length === 1 ? 'it' : 'them'}?</p>
+        <div class="modal-actions">
+          <button data-act="cancel">Cancel (skip)</button>
+          <button data-act="keep-both">Keep both</button>
+          <button data-act="replace" class="primary">Replace</button>
+        </div>
+      </div>`;
+    document.body.appendChild(modal);
+    modal.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-act]');
+      if (!btn) return;
+      document.body.removeChild(modal);
+      resolve(btn.dataset.act);
+    });
+  });
+}
+
+// Merge an ingest result into a destination file list, asking the user when
+// duplicates exist. Returns the new list (caller assigns).
+async function mergeWithDupCheck(existing, incoming, label) {
+  if (!incoming || incoming.length === 0) return { files: existing, skipped: 0 };
+  const dups = findDuplicates(existing, incoming);
+  if (dups.length === 0) {
+    // No conflicts — prepend like before so newest sits at top.
+    return { files: incoming.concat(existing), skipped: 0 };
+  }
+  const choice = await promptDuplicateChoice(dups);
+  if (choice === 'cancel') {
+    // Drop only the duplicates from the incoming; keep any non-duplicate
+    // incoming files (a folder drop might have new files alongside dupes).
+    const dupSet = new Set(dups.map((d) => d.incoming));
+    const filtered = incoming.filter((f) => !dupSet.has(f));
+    setStatus(`${label}: skipped ${dups.length} duplicate${dups.length === 1 ? '' : 's'}`, 'warn');
+    return { files: filtered.concat(existing), skipped: dups.length };
+  }
+  if (choice === 'replace') {
+    const dupExisting = new Set(dups.map((d) => d.existing));
+    const remaining = existing.filter((f) => !dupExisting.has(f));
+    setStatus(`${label}: replaced ${dups.length} duplicate${dups.length === 1 ? '' : 's'}`, 'ok');
+    return { files: incoming.concat(remaining), skipped: 0 };
+  }
+  // keep-both — add everything; user gets two copies of the duplicate names
+  setStatus(`${label}: kept both copies of ${dups.length} file${dups.length === 1 ? '' : 's'}`, 'ok');
+  return { files: incoming.concat(existing), skipped: 0 };
+}
+
 // Shared renderer for the loaded-files card. Both the Work and Absorb tabs use
 // this so the visual stays identical and any future tweak lands in one place.
 // `onRemove(file)` is called when the per-row × is clicked; the caller mutates
