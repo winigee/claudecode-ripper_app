@@ -66,6 +66,14 @@ function escapeHtml(s) {
 function skullSvg(extraClass = '') {
   return `<svg class="${extraClass}" viewBox="0 0 100 100" width="28" height="28" aria-hidden="true"><use href="#skull-svg"/></svg>`;
 }
+function claudeStarSvg(extraClass = '') {
+  return `<svg class="claude-star ${extraClass}" viewBox="0 0 100 100" width="26" height="26" aria-hidden="true"><use href="#claude-star"/></svg>`;
+}
+// Returns the right "in flight" mark for a bubble — skull for local, sparkle
+// for Claude — so the user can see at a glance which model is generating.
+function thinkingMark(source) {
+  return source === 'claude' ? claudeStarSvg('claude-star-spin') : skullSvg('skull-spin');
+}
 
 // ----- Tabs -----
 // Both the sidebar nav and the mobile bottom nav share the .tab class and
@@ -322,7 +330,8 @@ function appendThinkingBubble({ source = 'local' } = {}) {
   const div = document.createElement('div');
   div.className = 'bubble agent thinking ' + (source === 'claude' ? 'via-claude' : 'via-local');
   const subtitle = source === 'claude' ? '<div class="via-claude-note">asking Claude (redacted)…</div>' : '';
-  div.innerHTML = `${skullSvg('skull-spin')}<div class="bubble-content">${source === 'claude' ? 'redacting & asking Claude…' : 'thinking…'}</div>${subtitle}<div class="streaming-meter" hidden></div>`;
+  const body = source === 'claude' ? 'redacting & asking Claude…' : 'thinking…';
+  div.innerHTML = `${thinkingMark(source)}<div class="bubble-content">${body}</div>${subtitle}<div class="streaming-meter" hidden></div>`;
   root.appendChild(div);
   root.scrollTop = root.scrollHeight;
   return div;
@@ -567,7 +576,8 @@ window.bones.onToken(({ runId, delta }) => {
     if (state.pendingAgentEl.classList.contains('thinking')) {
       state.pendingAgentEl.classList.remove('thinking');
       const subtitle = isClaude ? '<div class="via-claude-note">via Claude · redacted in flight</div>' : '';
-      state.pendingAgentEl.innerHTML = `${skullSvg('skull-spin')}<div class="bubble-content"></div>${subtitle}<div class="streaming-meter"></div>`;
+      const mark = isClaude ? claudeStarSvg('claude-star-spin') : skullSvg('skull-spin');
+      state.pendingAgentEl.innerHTML = `${mark}<div class="bubble-content"></div>${subtitle}<div class="streaming-meter"></div>`;
     }
     state.pendingAgentText += delta;
     const c = state.pendingAgentEl.querySelector('.bubble-content');
@@ -2238,7 +2248,12 @@ async function setAboutVersion() {
   if (!window.bones.appVersion) return;
   try {
     const v = await window.bones.appVersion();
-    if (v) document.getElementById('about-version').textContent = v;
+    if (v) {
+      const a = document.getElementById('about-version');
+      const m = document.getElementById('brand-version');
+      if (a) a.textContent = v;
+      if (m) m.textContent = 'v' + v;
+    }
   } catch (_) {}
 }
 

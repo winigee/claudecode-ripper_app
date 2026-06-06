@@ -26,6 +26,7 @@
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-bone">BONE</span><span class="brand-ai">SAI</span>
+        <span class="brand-version" id="brand-version">v2.11.2</span>
       </div>
 
       <button id="btn-new-chat" class="new-chat">+ New chat</button>
@@ -659,6 +660,28 @@
             <line x1="44" y1="64" x2="44" y2="70" />
             <line x1="50" y1="64" x2="50" y2="70" />
             <line x1="56" y1="64" x2="56" y2="70" />
+          </g>
+        </symbol>
+        <!-- Claude scintilla — a 4-point cuspy sparkle with a smaller 45°-rotated
+             inner star for the 8-point shimmer. Used in place of the spinning
+             skull when Bones is waiting for a Claude API reply. -->
+        <symbol id="claude-star" viewBox="0 0 100 100">
+          <g fill="currentColor">
+            <path d="M 50 6
+                     Q 53 44, 94 50
+                     Q 53 56, 50 94
+                     Q 47 56, 6 50
+                     Q 47 44, 50 6 Z"/>
+            <path d="M 22 22
+                     Q 41 41, 50 50
+                     Q 41 59, 22 78
+                     Q 41 59, 50 50
+                     Q 59 41, 78 22
+                     Q 59 41, 50 50
+                     Q 59 59, 78 78
+                     Q 59 59, 50 50
+                     Q 41 59, 22 78 Z"
+                  opacity="0.45"/>
           </g>
         </symbol>
       </defs>

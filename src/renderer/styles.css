@@ -59,6 +59,15 @@ body {
 }
 .brand-bone { color: var(--text); }
 .brand-ai { color: var(--accent); }
+.brand-version {
+  display: block;
+  margin-top: 2px;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1px;
+  color: var(--muted);
+  font-family: ui-monospace, Menlo, monospace;
+}
 
 .new-chat {
   margin: 0 12px 8px;
@@ -1221,6 +1230,20 @@ input[type=text]:focus, #paste-area:focus, select:focus {
 .context-meter.tired #ctx-state { color: var(--warn); }
 .context-meter.spent .ctx-fill { background: var(--err); animation: pulse 1.5s ease-in-out infinite; }
 .context-meter.spent #ctx-state { color: var(--err); font-weight: 700; }
+
+/* Claude scintilla — paired with the spinning skull but for Claude-sourced
+   bubbles. Slower rotation so it reads as a calmer signal than the busier
+   skull-spin (Claude thinks for longer; the animation matches the vibe). */
+.claude-star { color: #d97757; flex-shrink: 0; }
+.claude-star-spin {
+  animation: claude-star-spin 3.6s linear infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+@keyframes claude-star-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 
 /* Ask Claude — distinct bubble styling so the user always knows when a chat
    reply came from the API path vs the local model. Uses Claude's brand
