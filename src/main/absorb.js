@@ -93,11 +93,13 @@ function dedupe(items) {
 async function absorbDocument({ name, text }, { onProgress, signal } = {}) {
   const chunks = chunkText(text);
   if (chunks.length === 0) {
-    return { name, facts: [], truncated: false, note: 'Document was empty.' };
+    return { name, facts: [], truncated: false, cancelled: false, note: 'Document was empty.' };
   }
   const truncated = (text || '').length > CHUNK_SIZE * MAX_CHUNKS;
   const all = [];
+  let cancelled = false;
   for (let i = 0; i < chunks.length; i++) {
+    if (signal && signal.aborted) { cancelled = true; break; }
     if (onProgress) onProgress({ stage: 'extracting', file: name, chunk: i + 1, of: chunks.length });
     let raw = '';
     try {
@@ -108,27 +110,37 @@ async function absorbDocument({ name, text }, { onProgress, signal } = {}) {
         signal,
       });
     } catch (e) {
-      if (e.name === 'AbortError') throw e;
+      if (e.name === 'AbortError') { cancelled = true; break; }
       // Skip the chunk on transient errors rather than failing the whole run.
       continue;
     }
     for (const f of parseFacts(raw)) all.push(f);
   }
-  return { name, facts: dedupe(all), truncated };
+  return { name, facts: dedupe(all), truncated, cancelled };
 }
 
 // Multi-file absorb. Returns one bundle per file so the renderer can show
-// them grouped under their source for review.
+// them grouped under their source for review. Crucially: if the run is
+// cancelled partway, return everything successfully extracted up to that
+// point — the user gets to keep work the model already did.
 async function absorbFiles(files, { onProgress, signal } = {}) {
   const results = [];
+  let cancelled = false;
+  const completed = []; // [{file, chunks: {done, total}}]
   for (let i = 0; i < files.length; i++) {
+    if (signal && signal.aborted) { cancelled = true; break; }
     const f = files[i];
     if (onProgress) onProgress({ stage: 'file', file: f.name || f.path, index: i + 1, of: files.length });
-    const r = await absorbDocument({ name: f.name || f.path, text: f.text || '' }, { onProgress, signal });
+    const r = await absorbDocument(
+      { name: f.name || f.path, text: f.text || '' },
+      { onProgress, signal }
+    );
     results.push(r);
+    if (r.cancelled) { cancelled = true; break; }
   }
-  if (onProgress) onProgress({ stage: 'done', total: results.reduce((n, r) => n + r.facts.length, 0) });
-  return { documents: results };
+  const total = results.reduce((n, r) => n + r.facts.length, 0);
+  if (onProgress) onProgress({ stage: 'done', total, cancelled });
+  return { documents: results, cancelled, total };
 }
 
 module.exports = { absorbDocument, absorbFiles, parseFacts, chunkText };

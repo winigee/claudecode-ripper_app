@@ -179,11 +179,16 @@ async function search({ files, query, expand = true, maxResults = 12 }, { onProg
     return { query, results: [], expandedTerms: [], note: 'Enter at least one meaningful search word.' };
   }
 
-  // Stage 1: expansion (optional).
+  // Stage 1: expansion (optional). On cancel, fall through to literal search.
   let expanded = [];
+  let cancelled = false;
   if (expand) {
     report('expanding');
-    expanded = (await expandQuery(query, signal)).filter((t) => !original.includes(t));
+    try {
+      expanded = (await expandQuery(query, signal)).filter((t) => !original.includes(t));
+    } catch (e) {
+      if (e.name === 'AbortError') cancelled = true; else throw e;
+    }
   }
 
   const weighted = new Map();
@@ -227,10 +232,20 @@ async function search({ files, query, expand = true, maxResults = 12 }, { onProg
     };
   }
 
-  // Stage 3: model relevance judging on the top candidates only.
+  // Stage 3: model relevance judging on the top candidates only. On cancel,
+  // return lexical-only ranking — better than nothing for the work done.
   const candidates = scored.slice(0, maxResults);
   report('judging', { count: candidates.length });
-  const judged = await judgeRelevance(query, candidates, signal);
+  let judged = new Map();
+  if (!(signal && signal.aborted)) {
+    try {
+      judged = await judgeRelevance(query, candidates, signal);
+    } catch (e) {
+      if (e.name === 'AbortError') cancelled = true; else throw e;
+    }
+  } else {
+    cancelled = true;
+  }
 
   for (let i = 0; i < candidates.length; i++) {
     const j = judged.get(i);
@@ -252,8 +267,8 @@ async function search({ files, query, expand = true, maxResults = 12 }, { onProg
     .filter((c) => c.relevance !== 'none')
     .sort((a, b) => (b.rank - a.rank) || (b.lexScore - a.lexScore));
 
-  report('done', { results: results.length });
-  return { query, expandedTerms: expanded, results, scanned: files.length };
+  report('done', { results: results.length, cancelled });
+  return { query, expandedTerms: expanded, results, scanned: files.length, cancelled };
 }
 
 module.exports = { search, queryTerms, chunkText, scoreChunk, expandQuery };

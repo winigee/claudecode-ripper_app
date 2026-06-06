@@ -340,9 +340,9 @@ ipcMain.handle('docsearch:run', async (event, payload, runId) => {
     const onProgress = (p) => {
       try { event.sender.send('docsearch:progress', { runId, ...p }); } catch (_) {}
     };
+    // Search returns whatever it could compute even when cancelled mid-judge.
     return await docsearch.search(payload || {}, { onProgress, signal: ctrl.signal });
   } catch (err) {
-    if (err.name === 'AbortError') return { error: { message: 'Cancelled', code: 'CANCELLED' } };
     return errorPayload(err);
   } finally {
     activeRuns.delete(runId);
@@ -357,9 +357,9 @@ ipcMain.handle('redact:run', async (event, payload, runId) => {
     const onProgress = (p) => {
       try { event.sender.send('redact:progress', { runId, ...p }); } catch (_) {}
     };
+    // Redact returns a regex-only result when the model NER is cancelled.
     return await redact.clean(payload.text || '', { useModel: payload.useModel !== false }, { onProgress, signal: ctrl.signal });
   } catch (err) {
-    if (err.name === 'AbortError') return { error: { message: 'Cancelled', code: 'CANCELLED' } };
     return errorPayload(err);
   } finally {
     activeRuns.delete(runId);
@@ -456,9 +456,9 @@ ipcMain.handle('absorb:run', async (event, files, runId) => {
     const onProgress = (p) => {
       try { event.sender.send('absorb:progress', { runId, ...p }); } catch (_) {}
     };
+    // Absorb returns whatever it managed before any cancel, with cancelled:true.
     return await absorb.absorbFiles(files || [], { onProgress, signal: ctrl.signal });
   } catch (err) {
-    if (err.name === 'AbortError') return { error: { message: 'Cancelled', code: 'CANCELLED' } };
     return errorPayload(err);
   } finally {
     activeRuns.delete(runId);

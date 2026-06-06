@@ -153,11 +153,15 @@ async function findEntitiesWithModel(text, signal, onProgress) {
   const people = new Set();
   const companies = new Set();
   for (let i = 0; i < pieces.length; i++) {
+    if (signal && signal.aborted) {
+      const e = new Error('aborted'); e.name = 'AbortError'; throw e;
+    }
     if (onProgress) onProgress({ stage: 'model', chunk: i + 1, of: pieces.length });
     let res = '';
     try {
       res = await llama.complete({ system: NER_SYSTEM, user: pieces[i], temperature: 0, signal });
-    } catch (_) {
+    } catch (e) {
+      if (e.name === 'AbortError') throw e;
       continue;
     }
     const ents = parseEntities(res);
@@ -176,16 +180,27 @@ async function clean(text, { useModel = true } = {}, { onProgress, signal } = {}
   let extraPeople = [];
   let extraCompanies = [];
   let truncated = false;
+  let modelCancelled = false;
   if (useModel && text && text.trim()) {
-    const ents = await findEntitiesWithModel(text, signal, onProgress);
-    extraPeople = ents.people;
-    extraCompanies = ents.companies;
-    truncated = ents.truncated;
+    try {
+      const ents = await findEntitiesWithModel(text, signal, onProgress);
+      extraPeople = ents.people;
+      extraCompanies = ents.companies;
+      truncated = ents.truncated;
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        // Honour the cancel but still produce a regex-only redaction so the
+        // user keeps something useful from the work already started.
+        modelCancelled = true;
+      } else {
+        throw e;
+      }
+    }
   }
   report('redacting');
   const r = redact(text || '', { extraPeople, extraCompanies });
-  report('done', { counts: r.counts, total: r.total });
-  return { ...r, modelUsed: useModel, truncated };
+  report('done', { counts: r.counts, total: r.total, cancelled: modelCancelled });
+  return { ...r, modelUsed: useModel && !modelCancelled, truncated, cancelled: modelCancelled };
 }
 
 module.exports = { redact, clean, findEntitiesWithModel, parseEntities };

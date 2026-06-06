@@ -32,6 +32,34 @@ const state = {
   lastCannonResponse: '',
 };
 
+// Render a progress bar with a label and a percentage into any container.
+// pct=null means indeterminate (animated stripe). Mirrors the .prog CSS in
+// styles.css — single source of truth for what a progress indicator looks like.
+function renderProgress(container, { pct, label, sub }) {
+  if (!container) return;
+  const indeterminate = pct == null;
+  const widthPct = indeterminate ? 35 : Math.max(0, Math.min(100, Math.round(pct)));
+  const pctText = indeterminate ? '' : `<span class="prog-pct">${widthPct}%</span>`;
+  container.innerHTML = `<div class="prog">
+    <div class="prog-bar"><div class="prog-fill${indeterminate ? ' indeterminate' : ''}" style="width:${widthPct}%"></div></div>
+    <div class="prog-text"><span>${escapeHtml(label || '')}${sub ? ` <span class="muted">${escapeHtml(sub)}</span>` : ''}</span>${pctText}</div>
+  </div>`;
+  container.hidden = false;
+}
+function clearProgress(container) {
+  if (container) { container.innerHTML = ''; container.hidden = true; }
+}
+
+// Streaming token counter — used while the local model or Claude is producing
+// output. Updates in place via setStreamingMeter(el, {tokens, startedAt}).
+function setStreamingMeter(el, { tokens, startedAt, label }) {
+  if (!el) return;
+  const elapsed = (Date.now() - startedAt) / 1000;
+  const rate = elapsed > 0.2 ? (tokens / elapsed).toFixed(1) : '0.0';
+  el.innerHTML = `<span class="pulse" aria-hidden="true"></span>
+    ${escapeHtml(label || 'streaming')} · ${tokens} tokens · ${elapsed.toFixed(1)}s · ${rate} tok/sec`;
+}
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
@@ -249,7 +277,7 @@ function appendThinkingBubble() {
   const root = $('#chat-messages');
   const div = document.createElement('div');
   div.className = 'bubble agent thinking';
-  div.innerHTML = `${skullSvg('skull-spin')}<div class="bubble-content">thinking…</div>`;
+  div.innerHTML = `${skullSvg('skull-spin')}<div class="bubble-content">thinking…</div><div class="streaming-meter" hidden></div>`;
   root.appendChild(div);
   root.scrollTop = root.scrollHeight;
   return div;
@@ -273,6 +301,7 @@ $('#chat-form').addEventListener('submit', async (e) => {
 
   state.pendingAgentEl = appendThinkingBubble();
   state.pendingAgentText = '';
+  resetStreamMeter();
 
   const runId = 'c-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   state.currentRunId = runId;
@@ -299,6 +328,11 @@ $('#chat-form').addEventListener('submit', async (e) => {
     state.pendingAgentEl.classList.remove('thinking');
     state.pendingAgentEl.innerHTML = `<div class="bubble-content" style="color:var(--err)">Error: ${escapeHtml(err.message)}</div>`;
   } finally {
+    // Drop the streaming meter from the now-settled bubble.
+    if (state.pendingAgentEl) {
+      const m = state.pendingAgentEl.querySelector('.streaming-meter');
+      if (m) m.remove();
+    }
     state.currentRunId = null;
     state.pendingAgentEl = null;
     state.pendingAgentText = '';
@@ -319,6 +353,16 @@ $('#chat-input').addEventListener('keydown', (e) => {
   }
 });
 
+// Streaming counters: shared state across whichever bubble/output is live.
+const streamMeter = { startedAt: 0, tokens: 0 };
+function bumpStreamMeter(el, label) {
+  // Cheap-ish: ~one token per delta is a good-enough proxy for the UI.
+  streamMeter.tokens += 1;
+  if (!streamMeter.startedAt) streamMeter.startedAt = Date.now();
+  if (el && !el.hidden) setStreamingMeter(el, { tokens: streamMeter.tokens, startedAt: streamMeter.startedAt, label });
+}
+function resetStreamMeter() { streamMeter.startedAt = 0; streamMeter.tokens = 0; }
+
 // Token stream for both chat and work runs
 window.bones.onToken(({ runId, delta }) => {
   if (runId !== state.currentRunId) return;
@@ -326,11 +370,13 @@ window.bones.onToken(({ runId, delta }) => {
   if (state.pendingAgentEl) {
     if (state.pendingAgentEl.classList.contains('thinking')) {
       state.pendingAgentEl.classList.remove('thinking');
-      state.pendingAgentEl.innerHTML = `${skullSvg('skull-spin')}<div class="bubble-content"></div>`;
+      // Preserve the streaming-meter element while swapping the body markup.
+      state.pendingAgentEl.innerHTML = `${skullSvg('skull-spin')}<div class="bubble-content"></div><div class="streaming-meter"></div>`;
     }
     state.pendingAgentText += delta;
     const c = state.pendingAgentEl.querySelector('.bubble-content');
     if (c) c.textContent = state.pendingAgentText;
+    bumpStreamMeter(state.pendingAgentEl.querySelector('.streaming-meter'), 'generating');
     const root = $('#chat-messages');
     root.scrollTop = root.scrollHeight;
     return;
@@ -342,6 +388,8 @@ window.bones.onToken(({ runId, delta }) => {
       co.textContent += delta;
       co.scrollTop = co.scrollHeight;
     }
+    const cm = $('#cannon-meter');
+    if (cm) bumpStreamMeter(cm, 'Claude streaming');
     return;
   }
   // Work path
@@ -486,12 +534,16 @@ const PROGRESS_LABELS = {
 function renderSearchProgress(p) {
   const el = $('#search-progress');
   if (!el) return;
-  let msg = PROGRESS_LABELS[p.stage] || '';
-  if (p.stage === 'scanning' && p.total != null) msg = `Scanning ${p.total} file(s)…`;
-  if (p.stage === 'judging' && p.count != null) msg = `Judging ${p.count} closest match(es) with the model…`;
-  if (!msg) { el.hidden = true; return; }
-  el.hidden = false;
-  el.textContent = msg;
+  // Three-stage pipeline: expanding (10%) → scanning (70%) → judging (20%).
+  if (p.stage === 'expanding') {
+    renderProgress(el, { pct: 5, label: 'Expanding query with related terms' });
+  } else if (p.stage === 'scanning') {
+    renderProgress(el, { pct: 50, label: 'Scanning files', sub: p.total != null ? `${p.total} file(s)` : '' });
+  } else if (p.stage === 'judging') {
+    renderProgress(el, { pct: 85, label: 'Judging top matches with the model', sub: p.count != null ? `${p.count} candidate(s)` : '' });
+  } else if (p.stage === 'done') {
+    clearProgress(el);
+  }
 }
 
 if (window.bones.onDocSearchProgress) {
@@ -598,22 +650,38 @@ $('#search-query').addEventListener('keydown', (e) => {
 // independent of Work. Drop files here → extract facts → review → save to
 // Memory.
 
-const ABSORB_LABELS = {
-  file: (p) => `Reading file ${p.index}/${p.of}: ${p.file}…`,
-  extracting: (p) => `Extracting knowledge from ${p.file} (part ${p.chunk}/${p.of})…`,
-  done: () => '',
-};
+// Track the most recent file index + chunk progress so we can compute a
+// rolling "% complete" across the whole absorb run.
+const absorbProgress = { files: 0, currentFile: 0, currentChunk: 0, totalChunks: 0 };
 
 if (window.bones.onAbsorbProgress) {
   window.bones.onAbsorbProgress((p) => {
     if (p.runId !== state.currentRunId) return;
     const el = $('#absorb-progress');
     if (!el) return;
-    const fn = ABSORB_LABELS[p.stage];
-    const msg = fn ? fn(p) : '';
-    if (!msg) { el.hidden = true; return; }
-    el.hidden = false;
-    el.textContent = msg;
+    if (p.stage === 'file') {
+      absorbProgress.files = p.of;
+      absorbProgress.currentFile = p.index;
+      absorbProgress.currentChunk = 0;
+      absorbProgress.totalChunks = 0;
+      renderProgress(el, {
+        pct: ((p.index - 1) / p.of) * 100,
+        label: `Reading file ${p.index} of ${p.of}`,
+        sub: p.file,
+      });
+    } else if (p.stage === 'extracting') {
+      absorbProgress.currentChunk = p.chunk;
+      absorbProgress.totalChunks = p.of;
+      const filesPct = (absorbProgress.currentFile - 1) / absorbProgress.files;
+      const insidePct = (p.chunk / p.of) / absorbProgress.files;
+      renderProgress(el, {
+        pct: (filesPct + insidePct) * 100,
+        label: `Extracting from ${p.file}`,
+        sub: `part ${p.chunk} of ${p.of}`,
+      });
+    } else if (p.stage === 'done') {
+      clearProgress(el);
+    }
   });
 }
 
@@ -847,19 +915,28 @@ $('#btn-absorb').addEventListener('click', async () => {
       setStatus('absorb error: ' + (res.error.message || 'unknown'), 'err');
       return;
     }
-    // Stage docs + facts for review with everything ticked by default; user
-    // unticks anything they don't want.
+    // Stage docs + facts for review. Even if the run was cancelled partway,
+    // the docs array contains everything extracted up to that point — surface
+    // it for review instead of throwing the work away.
     state.absorbDocs = (res.documents || []).map((d) => ({
       name: d.name,
       facts: (d.facts || []).map((text) => ({ text, picked: true })),
     }));
     const total = state.absorbDocs.reduce((n, d) => n + d.facts.length, 0);
+    const wasCancelled = !!res.cancelled;
     if (total === 0) {
-      setStatus('absorbed · no facts extracted', 'warn');
+      setStatus(wasCancelled ? 'cancelled · nothing extracted yet' : 'absorbed · no facts extracted', 'warn');
       return;
     }
+    state.absorbCancelled = wasCancelled;
     showAbsorbModal();
-    setStatus(`absorbed · ${total} fact(s) to review`, 'ok');
+    const filesDone = state.absorbDocs.filter((d) => d.facts.length > 0).length;
+    setStatus(
+      wasCancelled
+        ? `cancelled · ${total} fact(s) from ${filesDone} file(s) ready to review`
+        : `absorbed · ${total} fact(s) to review`,
+      'ok'
+    );
   } catch (err) {
     setStatus('absorb error: ' + err.message, 'err');
   } finally {
@@ -886,6 +963,12 @@ function hideAbsorbModal() {
 function renderAbsorbReview() {
   const root = $('#absorb-review');
   root.innerHTML = '';
+  if (state.absorbCancelled) {
+    const banner = document.createElement('div');
+    banner.className = 'absorb-banner';
+    banner.textContent = 'Cancelled — these are the partial results extracted before you stopped the run. You can still keep any of them.';
+    root.appendChild(banner);
+  }
   for (let di = 0; di < state.absorbDocs.length; di++) {
     const doc = state.absorbDocs[di];
     const group = document.createElement('div');
@@ -958,11 +1041,19 @@ if (window.bones.onRedactProgress) {
     if (p.runId !== state.currentRunId) return;
     const el = $('#redact-progress');
     if (!el) return;
-    let msg = REDACT_LABELS[p.stage] || '';
-    if (p.stage === 'model' && p.chunk) msg = `Scanning for names with the local model… (part ${p.chunk}/${p.of})`;
-    if (!msg) { el.hidden = true; return; }
-    el.hidden = false;
-    el.textContent = msg;
+    if (p.stage === 'model' && p.chunk) {
+      // Model NER takes ~85% of the time; reserve the last 15% for regex.
+      const pct = (p.chunk / p.of) * 85;
+      renderProgress(el, {
+        pct,
+        label: 'Scanning for names with the local model',
+        sub: `part ${p.chunk} of ${p.of}`,
+      });
+    } else if (p.stage === 'redacting') {
+      renderProgress(el, { pct: 95, label: 'Applying redactions' });
+    } else if (p.stage === 'done') {
+      clearProgress(el);
+    }
   });
 }
 
@@ -1218,6 +1309,9 @@ $('#btn-cannon').addEventListener('click', async () => {
   state.currentRunId = runId;
   state.tokenSink = 'cannon';
   $('#cannon-output').textContent = '';
+  resetStreamMeter();
+  const cmEl = $('#cannon-meter');
+  if (cmEl) { cmEl.hidden = false; cmEl.innerHTML = ''; }
   $('#btn-cannon').disabled = true;
   $('#btn-cannon-cancel').hidden = false;
   $('#btn-cannon-save-brain').disabled = true;
@@ -1255,6 +1349,8 @@ $('#btn-cannon').addEventListener('click', async () => {
     state.tokenSink = null;
     $('#btn-cannon').disabled = false;
     $('#btn-cannon-cancel').hidden = true;
+    const cm = $('#cannon-meter');
+    if (cm) cm.hidden = true;
   }
 });
 
