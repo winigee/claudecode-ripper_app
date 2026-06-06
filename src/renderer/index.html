@@ -229,6 +229,7 @@
           <button data-jump="setting-models-list" class="snav">Models</button>
           <button data-jump="setting-api" class="snav">Claude API</button>
           <button data-jump="setting-sharing" class="snav">Sharing</button>
+          <button data-jump="setting-help" class="snav">Help &amp; FAQ</button>
           <button data-jump="setting-diag" class="snav">Diagnostics</button>
           <button data-jump="setting-about" class="snav">About</button>
         </nav>
@@ -359,6 +360,115 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <div class="setting" id="setting-help">
+          <label>Help &amp; FAQ</label>
+
+          <div class="help-section">
+            <div class="help-section-head">Quick start</div>
+            <ol class="help-quickstart">
+              <li><strong>Chat</strong> — open the Chat tab, type a question, hit Send. Bones answers locally; nothing leaves the Mac.</li>
+              <li><strong>Work on a document</strong> — open Work, drop a file, then Summarise, find related material, or Redact &amp; send to Claude with a prompt of your choice.</li>
+              <li><strong>Teach Bones</strong> — Settings → Memory, type a fact and hit Teach. Every local model uses it from then on. Or use the Absorb tab to extract many facts from a document at once.</li>
+            </ol>
+          </div>
+
+          <div class="help-section">
+            <div class="help-section-head">FAQ</div>
+
+            <details class="help-q">
+              <summary>What is BonesAI, and is it private?</summary>
+              <p>A local-first AI app for your Mac. The model runs on your hardware via llamafile — every chat, search, and redaction stays on this machine. The single exception is the Claude cannon (Work → Send to Claude), which deliberately reaches Anthropic's API, and only with material you've redacted first.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>What's the difference between Chat, Work, Absorb and Brain?</summary>
+              <p><strong>Chat</strong> is everyday conversation with the local model. <strong>Work</strong> is for analysing one or more documents — summarise, find related content, redact and fire at Claude. <strong>Absorb</strong> turns documents into Memory entries Bones uses in every future conversation. <strong>Brain</strong> is your saved notes — outputs you've kept for later (summaries, Claude replies, etc.).</p>
+            </details>
+
+            <details class="help-q">
+              <summary>Memory vs Brain — what's the difference?</summary>
+              <p><strong>Memory</strong> is injected into every local-model chat as standing context. It's what Bones &ldquo;knows&rdquo; about you and your work. Limited to ~4,000 characters so it doesn't eat the context budget.</p>
+              <p><strong>Brain</strong> is a passive store of saved outputs you can browse. Not injected into chats — it's for reference, not for the model.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>How do I switch models (e.g. from Qwen to Saul)?</summary>
+              <p>Settings → Available models → click <strong>Make active</strong> on the model you want. The server restarts on the new model in a few seconds. The status pill bottom-left of the sidebar shows which model is currently running.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>Why does one model run slower than another?</summary>
+              <p>Bigger models (more parameters) need more compute per token, and the 2019 i9 / 2014 MBP runs everything on the CPU. Qwen 7B will be roughly 6-7 tokens/sec; a 14B model would be 1-2 tokens/sec — fine for a one-off summary, painful for live chat. Saul 7B is similar speed to Qwen 7B since they're the same size class.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>What's the context window for, and what should I set it to?</summary>
+              <p>Context window = how much text the model can hold in mind at once (input + reply). Bigger = handles longer documents but uses more RAM and is slower per token. Defaults: 16K on 16+ GB Macs, 4K on 8 GB. Tune in Settings → Performance. 32K is doable on this i9 but worth it only for genuinely long jobs.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>How does Absorb actually work? Is it &ldquo;training&rdquo; the model?</summary>
+              <p>No — true fine-tuning needs Apple Silicon or a GPU. Absorb runs the local model over the documents, extracts the load-bearing facts as discrete sentences, and you review which to keep. The kept ones go into Memory. From your point of view Bones &ldquo;learns&rdquo; the document; under the hood it's structured context, fully reversible (delete any Memory entry to forget it).</p>
+            </details>
+
+            <details class="help-q">
+              <summary>What does Redact do, and can I trust it?</summary>
+              <p>Redact replaces people's names, company names, addresses, emails, phones, and postcodes in your material with placeholders like <code>[PERSON_1]</code>. Two passes: deterministic regex (titled people, companies with legal suffixes, etc.) + an optional local-model scan for plain names the regex misses. <strong>Always review the editable redacted box before clicking Send to Claude</strong> — it's the safety net for anything that slips through.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>What happens when Claude replies? Do I see real names again?</summary>
+              <p>Yes. Bones remembers which placeholder maps to which real entity in memory only (never on disk) and swaps them back into Claude's reply automatically. Toggle between the redacted and re-identified views with the button under the response. The map is wiped when you redact a new document or quit the app.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>How do I open BonesAI on my iPhone?</summary>
+              <p>Settings → Sharing → tick <strong>Enable web server</strong>, set Scope to <strong>Local network</strong>, copy the URL. Open in Safari on the iPhone (must be same Wi-Fi or Tailscale). Add to Home Screen for a real fullscreen app experience. Some features (Work, Absorb, model management) are host-only — the phone is best for Chat and viewing Brain.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>How does iCloud Memory sync work?</summary>
+              <p>Settings → Memory → tick <strong>Store memory in iCloud Drive</strong>. The Memory file moves to <code>iCloud Drive/BonesAI/memory.json</code>. Every Mac you install BonesAI on reads the same file, so what you teach on one machine appears on the others. The file is also visible in the Files app on iPhone/iPad. Only this small JSON syncs — model files stay local on each Mac.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>How do I install BonesAI on another Mac?</summary>
+              <p>Download the latest release zip from the BonesAI GitHub. Right-click the app the first time → Open (to bypass Gatekeeper). The model file (4-9 GB) downloads on first launch. Turn on iCloud Memory sync and the new Mac inherits everything you've taught Bones already.</p>
+            </details>
+          </div>
+
+          <div class="help-section">
+            <div class="help-section-head">Troubleshooting</div>
+
+            <details class="help-q">
+              <summary>Server error / model won't start</summary>
+              <p>Settings → Diagnostics → <strong>Export log</strong>. The log shows exactly what llamafile said when it tried to load the model. Common causes: file truncated mid-download (delete and re-download), file format unsupported by llamafile (try a different quant from another HF uploader), or out of RAM (drop the context window or pick a smaller model).</p>
+            </details>
+
+            <details class="help-q">
+              <summary>Model download fails with HTTP 401 or 403</summary>
+              <p>The HuggingFace repo requires login or terms acceptance. Either use a different ungated uploader (TheBloke, bartowski, mobeetle), or download the GGUF manually from the HF page in Safari, drop it into <code>~/Library/Application Support/BonesAI/models/</code>, and use <strong>Re-scan models folder</strong> in Settings.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>iPhone can't reach BonesAI over Wi-Fi</summary>
+              <p>Confirm both devices are on the same network (not a Guest Wi-Fi with isolation). Check the URL in Settings → Sharing matches the one you opened on the iPhone. macOS firewall may need to allow incoming connections — System Settings → Network → Firewall. For "from anywhere" access, install Tailscale on both — then the Tailscale URL works over the encrypted mesh.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>Chat with Claude says "no API key"</summary>
+              <p>Settings → Claude API → paste an Anthropic API key (sk-ant-…) and Save. Key lives in <code>config.json</code> on this Mac only (mode 0600, owner-readable only) and is never logged.</p>
+            </details>
+
+            <details class="help-q">
+              <summary>Where is my data stored?</summary>
+              <p><code>~/Library/Application Support/BonesAI/</code> on macOS. Contains <code>config.json</code>, <code>chats/</code>, <code>notes.json</code> (Brain), <code>models/</code> (GGUF files), <code>runtime/</code> (llamafile binary), and <code>memory.json</code> (unless on iCloud). Delete that whole folder to reset everything.</p>
+            </details>
+          </div>
+
+          <p class="hint">Hit a problem not listed here? Settings → Diagnostics → Export log, and send the .txt file.</p>
         </div>
 
         <div class="setting" id="setting-diag">
