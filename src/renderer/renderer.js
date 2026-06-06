@@ -13,6 +13,7 @@ const state = {
   currentChatId: null,
   projects: [],
   pendingProjectId: null,
+  draggingChatId: null,
   currentMessages: [],
   pendingAgentEl: null,
   pendingAgentText: '',
@@ -306,39 +307,53 @@ async function refreshChatList() {
   root.innerHTML = '';
   if (chatSearchTerm) {
     for (const c of list) root.appendChild(chatRow(c, { showSnippet: true }));
-  } else {
-    const byProject = new Map();
-    const unfiled = [];
-    for (const c of list) {
-      if (c.project_id && (projects || []).some((p) => p.id === c.project_id)) {
-        if (!byProject.has(c.project_id)) byProject.set(c.project_id, []);
-        byProject.get(c.project_id).push(c);
-      } else {
-        unfiled.push(c);
+    return;
+  }
+
+  const allProjects = projects || [];
+  const validIds = new Set(allProjects.map((p) => p.id));
+  const byProject = new Map();
+  const unfiled = [];
+  for (const c of list) {
+    if (c.project_id && validIds.has(c.project_id)) {
+      if (!byProject.has(c.project_id)) byProject.set(c.project_id, []);
+      byProject.get(c.project_id).push(c);
+    } else {
+      unfiled.push(c);
+    }
+  }
+
+  // Build the tree: top-level projects, each followed by its subprojects.
+  const topProjects = allProjects.filter((p) => !p.parent_id);
+  for (const top of topProjects) {
+    root.appendChild(projectGroup(top, byProject.get(top.id) || []));
+    const subs = allProjects.filter((p) => p.parent_id === top.id);
+    if (!collapsedProjects.has(top.id)) {
+      for (const sub of subs) {
+        root.appendChild(projectGroup(sub, byProject.get(sub.id) || [], false, true));
       }
     }
-    // Projects first (alpha), then unfiled.
-    for (const p of projects || []) {
-      const chatsIn = byProject.get(p.id) || [];
-      root.appendChild(projectGroup(p, chatsIn));
-    }
-    if (unfiled.length) {
-      root.appendChild(projectGroup({ id: '_unfiled', name: 'Unfiled' }, unfiled, true));
-    }
+  }
+  if (unfiled.length) {
+    root.appendChild(projectGroup({ id: '_unfiled', name: 'Unfiled' }, unfiled, true));
   }
 }
 
-function projectGroup(project, chatsIn, isUnfiled = false) {
+const FOLDER_SVG = '<svg class="folder-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.5l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+
+function projectGroup(project, chatsIn, isUnfiled = false, isSub = false) {
   const wrap = document.createElement('div');
-  wrap.className = 'project-group';
+  wrap.className = 'project-group' + (isSub ? ' sub' : '');
   const collapsed = collapsedProjects.has(project.id);
   const head = document.createElement('div');
-  head.className = 'project-head' + (collapsed ? ' collapsed' : '');
+  head.className = 'project-head' + (collapsed ? ' collapsed' : '') + (isSub ? ' sub' : '');
+  head.dataset.projectId = isUnfiled ? '' : project.id;
   head.innerHTML = `
     <span class="project-caret">▾</span>
+    ${isUnfiled ? '' : FOLDER_SVG}
     <span class="project-name"></span>
     <span class="project-count">${chatsIn.length}</span>
-    ${isUnfiled ? '' : '<button class="project-menu-btn" title="Rename or delete">⋯</button>'}
+    ${isUnfiled ? '' : '<button class="project-menu-btn" title="Project options">⋯</button>'}
   `;
   head.querySelector('.project-name').textContent = project.name;
   head.addEventListener('click', (e) => {
@@ -351,19 +366,36 @@ function projectGroup(project, chatsIn, isUnfiled = false) {
     head.querySelector('.project-menu-btn').addEventListener('click', (e) => {
       e.stopPropagation();
       const r = e.target.getBoundingClientRect();
-      projectMenu(project, r.left, r.bottom);
+      projectMenu(project, r.left, r.bottom, isSub);
     });
     head.addEventListener('contextmenu', (e) => {
       e.preventDefault(); e.stopPropagation();
-      projectMenu(project, e.clientX, e.clientY);
+      projectMenu(project, e.clientX, e.clientY, isSub);
     });
   }
+  // Drop target: dragging a chat onto this header files it into this project
+  // (or unfiles it for the Unfiled header).
+  const targetProjectId = isUnfiled ? null : project.id;
+  head.addEventListener('dragover', (e) => {
+    if (!state.draggingChatId) return;
+    e.preventDefault();
+    head.classList.add('drop-target');
+  });
+  head.addEventListener('dragleave', () => head.classList.remove('drop-target'));
+  head.addEventListener('drop', async (e) => {
+    e.preventDefault();
+    head.classList.remove('drop-target');
+    const chatId = state.draggingChatId;
+    if (!chatId) return;
+    await window.bones.chatSetProject(chatId, targetProjectId);
+    refreshChatList();
+  });
   wrap.appendChild(head);
   if (!collapsed) {
     const body = document.createElement('div');
     body.className = 'project-body';
     if (chatsIn.length === 0) {
-      body.innerHTML = '<div class="project-empty muted">empty</div>';
+      body.innerHTML = '<div class="project-empty muted">empty — drop a chat here</div>';
     } else {
       for (const c of chatsIn) body.appendChild(chatRow(c));
     }
@@ -375,6 +407,7 @@ function projectGroup(project, chatsIn, isUnfiled = false) {
 function chatRow(c, { showSnippet = false } = {}) {
   const row = document.createElement('div');
   row.className = 'chat-row' + (c.id === state.currentChatId ? ' active' : '');
+  row.draggable = true;
   row.innerHTML = `
     <div class="chat-row-main">
       <span class="chat-row-title"></span>
@@ -385,6 +418,17 @@ function chatRow(c, { showSnippet = false } = {}) {
   `;
   row.querySelector('.chat-row-title').textContent = c.title;
   if (showSnippet && c.snippet) row.querySelector('.chat-row-snippet').textContent = c.snippet;
+  // Drag to move between projects.
+  row.addEventListener('dragstart', (e) => {
+    state.draggingChatId = c.id;
+    row.classList.add('dragging');
+    try { e.dataTransfer.setData('text/plain', c.id); e.dataTransfer.effectAllowed = 'move'; } catch (_) {}
+  });
+  row.addEventListener('dragend', () => {
+    state.draggingChatId = null;
+    row.classList.remove('dragging');
+    document.querySelectorAll('.drop-target').forEach((el) => el.classList.remove('drop-target'));
+  });
   row.addEventListener('click', (e) => {
     if (e.target.closest('.chat-row-del') || e.target.closest('.chat-row-file')) return;
     loadChat(c.id);
@@ -413,14 +457,22 @@ function chatRow(c, { showSnippet = false } = {}) {
 function fileChatMenu(chat, x, y) {
   const projects = state.projects || [];
   const items = [{ header: `File "${truncate(chat.title, 28)}"` }];
-  for (const p of projects) {
+  const tops = projects.filter((p) => !p.parent_id);
+  for (const top of tops) {
     items.push({
-      label: p.name,
-      checked: chat.project_id === p.id,
-      onClick: async () => { await window.bones.chatSetProject(chat.id, p.id); refreshChatList(); },
+      label: top.name,
+      checked: chat.project_id === top.id,
+      onClick: async () => { await window.bones.chatSetProject(chat.id, top.id); refreshChatList(); },
     });
+    for (const sub of projects.filter((p) => p.parent_id === top.id)) {
+      items.push({
+        label: '   ↳ ' + sub.name,
+        checked: chat.project_id === sub.id,
+        onClick: async () => { await window.bones.chatSetProject(chat.id, sub.id); refreshChatList(); },
+      });
+    }
   }
-  if (projects.length) items.push({ separator: true });
+  if (tops.length) items.push({ separator: true });
   items.push({
     label: '＋ New project…',
     onClick: async () => {
@@ -465,25 +517,40 @@ async function renameChat(chat) {
 }
 
 // Context menu for a project header (the ⋯ button + right-click).
-function projectMenu(project, x, y) {
-  showContextMenu(x, y, [
+function projectMenu(project, x, y, isSub = false) {
+  const items = [
     { header: project.name },
     { label: 'New chat in project', onClick: () => {
       state.pendingProjectId = project.id;
       startNewChat();
       setStatus(`new chat → ${project.name}`, 'ok');
     } },
-    { label: 'Rename…', onClick: async () => {
-      const name = await showInput({ title: 'Rename project', value: project.name, okText: 'Rename' });
-      if (name && name !== project.name) { await window.bones.projectsRename(project.id, name); refreshChatList(); }
-    } },
-    { separator: true },
-    { label: 'Delete project', danger: true, onClick: async () => {
-      if (!confirm(`Delete project "${project.name}"? Its chats move to Unfiled.`)) return;
-      await window.bones.projectsDelete(project.id);
+  ];
+  // Only top-level projects can have subprojects (one level of nesting).
+  if (!isSub) {
+    items.push({ label: '＋ New subproject…', onClick: async () => {
+      const name = await showInput({ title: 'New subproject', label: `Inside "${project.name}"`, placeholder: 'Subproject name', okText: 'Create' });
+      if (!name) return;
+      const r = await window.bones.projectsAdd(name, project.id);
+      if (r && r.error) { alert(r.error); return; }
+      collapsedProjects.delete(project.id);
       refreshChatList();
-    } },
-  ]);
+    } });
+  }
+  items.push({ label: 'Rename…', onClick: async () => {
+    const name = await showInput({ title: 'Rename project', value: project.name, okText: 'Rename' });
+    if (name && name !== project.name) { await window.bones.projectsRename(project.id, name); refreshChatList(); }
+  } });
+  items.push({ separator: true });
+  items.push({ label: isSub ? 'Delete subproject' : 'Delete project', danger: true, onClick: async () => {
+    const msg = isSub
+      ? `Delete subproject "${project.name}"? Its chats move to Unfiled.`
+      : `Delete project "${project.name}" and its subprojects? Their chats move to Unfiled.`;
+    if (!confirm(msg)) return;
+    await window.bones.projectsDelete(project.id);
+    refreshChatList();
+  } });
+  showContextMenu(x, y, items);
 }
 
 // Context menu for the blank area of the chat list.

@@ -496,7 +496,7 @@ ipcMain.handle('chat:set-project', (_e, { id, projectId }) => chats.setProject(i
 
 // --- Projects ---
 ipcMain.handle('projects:list', () => projects.list());
-ipcMain.handle('projects:add', (_e, name) => projects.add(name));
+ipcMain.handle('projects:add', (_e, name, parentId) => projects.add(name, parentId || null));
 ipcMain.handle('projects:rename', (_e, { id, name }) => projects.rename(id, name));
 ipcMain.handle('projects:delete', (_e, id) => projects.remove(id));
 

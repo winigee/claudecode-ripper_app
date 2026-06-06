@@ -87,7 +87,7 @@ contextBridge.exposeInMainWorld('bones', {
 
   // Projects
   projectsList: () => ipcRenderer.invoke('projects:list'),
-  projectsAdd: (name) => ipcRenderer.invoke('projects:add', name),
+  projectsAdd: (name, parentId) => ipcRenderer.invoke('projects:add', name, parentId),
   projectsRename: (id, name) => ipcRenderer.invoke('projects:rename', { id, name }),
   projectsDelete: (id) => ipcRenderer.invoke('projects:delete', id),
 

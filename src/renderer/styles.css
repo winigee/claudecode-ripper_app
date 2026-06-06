@@ -160,6 +160,17 @@ body {
 .project-head:hover { background: var(--bg-3); color: var(--text); }
 .project-caret { font-size: 9px; transition: transform 0.12s; }
 .project-head.collapsed .project-caret { transform: rotate(-90deg); }
+.folder-icon { color: var(--accent); flex-shrink: 0; opacity: 0.85; }
+.project-head.sub { padding-left: 22px; font-size: 10.5px; }
+.project-head.sub .folder-icon { opacity: 0.6; width: 11px; height: 11px; }
+.project-group.sub .project-body { padding-left: 22px; }
+.project-head.drop-target {
+  background: rgba(76, 199, 255, 0.18);
+  outline: 1px dashed var(--accent);
+  color: var(--accent);
+}
+.chat-row.dragging { opacity: 0.45; }
+.chat-row[draggable="true"] { cursor: grab; }
 .project-name {
   flex: 1;
   overflow: hidden;

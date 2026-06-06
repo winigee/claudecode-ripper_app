@@ -37,11 +37,22 @@ function list() {
   return load().projects.slice().sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 }
 
-function add(name) {
+function add(name, parentId = null) {
   const clean = String(name || '').trim().slice(0, 60);
   if (!clean) return { error: 'empty' };
   const data = load();
-  const project = { id: newId(), name: clean, created_at: new Date().toISOString() };
+  if (parentId) {
+    const parent = data.projects.find((p) => p.id === parentId);
+    if (!parent) return { error: 'parent project not found' };
+    // Enforce a single level of nesting — a subproject can't have children.
+    if (parent.parent_id) return { error: 'Only one level of subprojects is allowed.' };
+  }
+  const project = {
+    id: newId(),
+    name: clean,
+    parent_id: parentId || null,
+    created_at: new Date().toISOString(),
+  };
   data.projects.push(project);
   save(data);
   return project;
@@ -58,12 +69,16 @@ function rename(id, name) {
   return p;
 }
 
+// Deleting a project also deletes its subprojects. Chats are never deleted —
+// the renderer treats any chat whose project_id no longer exists as Unfiled.
 function remove(id) {
   const data = load();
   const before = data.projects.length;
-  data.projects = data.projects.filter((p) => p.id !== id);
+  const toRemove = new Set([id]);
+  for (const p of data.projects) if (p.parent_id === id) toRemove.add(p.id);
+  data.projects = data.projects.filter((p) => !toRemove.has(p.id));
   save(data);
-  return { ok: data.projects.length !== before };
+  return { ok: data.projects.length !== before, removed: Array.from(toRemove) };
 }
 
 module.exports = { list, add, rename, remove };
