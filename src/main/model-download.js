@@ -21,6 +21,13 @@ function followRedirects(url, maxRedirects = 5) {
         }
         if (res.statusCode !== 200) {
           res.resume();
+          if (res.statusCode === 401 || res.statusCode === 403) {
+            return reject(new Error(
+              `HTTP ${res.statusCode} — this HuggingFace repo requires you to be logged in `
+              + 'or to accept its terms. Try a different model, or open the URL in a browser to '
+              + 'see what it needs.'
+            ));
+          }
           return reject(new Error(`HTTP ${res.statusCode} for ${currentUrl}`));
         }
         resolve(res);
