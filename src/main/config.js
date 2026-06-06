@@ -113,6 +113,46 @@ function detectHardware() {
   return { ramGB, arch: process.arch, cpus: os.cpus().length };
 }
 
+// --- Context window (n_ctx for llamafile) ---
+//
+// llamafile's RAM appetite scales noticeably with context: a 7B model at 16K
+// context allocates ~1.6 GB of KV cache on top of the weights, ~3 GB at 32K.
+// We default by RAM so a 16 GB machine gets useful headroom for document work
+// without crashing low-memory Macs.
+
+const CONTEXT_CHOICES = [4096, 8192, 16384, 32768];
+
+function defaultContext() {
+  const { ramGB } = detectHardware();
+  if (ramGB >= 32) return 16384;   // bigger contexts hurt token speed even with RAM
+  if (ramGB >= 16) return 16384;
+  if (ramGB >= 12) return 8192;
+  return 4096;
+}
+
+function getContext() {
+  const cfg = readConfig();
+  const v = Number(cfg.context);
+  if (CONTEXT_CHOICES.includes(v)) return v;
+  return defaultContext();
+}
+
+function setContext(n) {
+  const v = Number(n);
+  if (!CONTEXT_CHOICES.includes(v)) throw new Error(`unsupported context: ${n}`);
+  const cfg = readConfig();
+  cfg.context = v;
+  writeConfig(cfg);
+  return v;
+}
+
+// Physical-core count is the right thread default for llama.cpp on x86 — more
+// threads via hyper-threading typically hurt due to cache contention. macOS
+// reports logical cores from os.cpus(), so we halve it.
+function defaultThreads() {
+  return Math.max(2, Math.floor(detectHardware().cpus / 2));
+}
+
 function recommendModelId() {
   const { ramGB, arch } = detectHardware();
   const isAppleSilicon = arch === 'arm64';
@@ -204,6 +244,11 @@ module.exports = {
   isModelInstalled,
   recommendModelId,
   detectHardware,
+  getContext,
+  setContext,
+  defaultContext,
+  defaultThreads,
+  CONTEXT_CHOICES,
   MODELS,
   LLAMAFILE_VERSION,
   LLAMAFILE_URL,

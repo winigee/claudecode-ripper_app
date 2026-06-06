@@ -204,6 +204,21 @@
           </div>
         </div>
 
+        <div class="setting" id="setting-perf">
+          <label>Performance</label>
+          <p class="hint" id="perf-hw">Detecting hardware…</p>
+          <div class="row">
+            <label style="font-size:11px;color:var(--accent);letter-spacing:1px">CONTEXT WINDOW</label>
+            <select id="perf-context">
+              <option value="4096">4K — minimum, fastest</option>
+              <option value="8192">8K — safe default</option>
+              <option value="16384">16K — long documents</option>
+              <option value="32768">32K — large jobs (heavy RAM)</option>
+            </select>
+          </div>
+          <p class="hint" id="perf-runtime"></p>
+        </div>
+
         <div class="setting" id="setting-api">
           <label>Claude API (cannon)</label>
           <p class="hint">Used only by “Send to Claude” in the Work tab. Your redacted material and prompt are sent to Anthropic’s API. The key is stored locally on this Mac (config.json, owner-only) and never logged.</p>
@@ -252,18 +267,17 @@
         </div>
 
         <div class="setting">
-          <label>About BonesAI v2.5.0</label>
+          <label>About BonesAI v2.6.0</label>
           <p class="hint">
             <strong>Local-first.</strong> Inference, search, and redaction all run on this Mac via
             llamafile + a local model. The one exception is “Send to Claude”, which reaches the
             Anthropic API on purpose — and only ever with material you have redacted first.
           </p>
           <p class="hint">
-            v2.5.0 makes BonesAI installable on iPhone as a Progressive Web App — open the URL
-            in Safari, Share → Add to Home Screen, and it runs fullscreen with a proper icon,
-            bottom tab bar, and safe-area handling for the Dynamic Island and home indicator.
-            v2.4.1 added re-identification — real names are remembered locally and put back
-            into Claude’s reply automatically.
+            v2.6.0 adds a tunable context window in Settings → Performance, and bumps the
+            default to 16K on Macs with ≥16 GB RAM so long documents fit without manual
+            steps. v2.5.0 made BonesAI installable on iPhone as a PWA — open the URL in
+            Safari, Share → Add to Home Screen, and it runs fullscreen.
           </p>
           <p class="hint">
             v2.2.0 added Network sharing — open BonesAI in a browser on other devices on the same

@@ -1,7 +1,7 @@
 # BonesAI — Session Dump
 
 Resume point for the next session in case this one hangs.
-Updated after v2.5.0 (mobile / PWA).
+Updated after v2.6.0 (tunable context window / 2019 i9 tuning).
 
 ## Repo & branch
 
@@ -12,8 +12,8 @@ Updated after v2.5.0 (mobile / PWA).
 
 ## Latest release
 
-- File: `releases/BonesAI-v2.5.0-mac-x64.app.zip` (~90 MB)
-- Raw URL: `https://github.com/winigee/claudecode-ripper_app/raw/claude/bold-brahmagupta-oekyf/releases/BonesAI-v2.5.0-mac-x64.app.zip`
+- File: `releases/BonesAI-v2.6.0-mac-x64.app.zip` (~90 MB)
+- **Use SHA-pinned raw URL** (github.com/raw/ redirect chokes on 90 MB): `https://raw.githubusercontent.com/winigee/claudecode-ripper_app/<commit-sha>/releases/BonesAI-v2.6.0-mac-x64.app.zip`
 - Built unsigned (`mac.identity: null`). User installs by right-click → Open the first time to bypass Gatekeeper.
 
 ## Build & ship recipe
@@ -123,7 +123,11 @@ src/renderer/
 
 ## User state / preferences
 
-- **Hardware**: 2014 MBP currently the host. iPhone is **16 Plus** (note: not Pro), 6.7" display, iOS 18. Planning to add an always-on Mac later (Mac mini in mind, parked). Wants iPhone + other Macs to reach BonesAI.
+- **Hardware**:
+  - **2014 MBP** — original host. Wants iPhone + other Macs to reach BonesAI.
+  - **2019 MacBook Pro 15"** — i9 2.3 GHz 8C/16T, 16 GB DDR4-2400, Intel UHD 630, macOS Sonoma 14.3.1. v2.6.0 detects this profile and gives 16K context + 8 physical threads by default.
+  - **iPhone 16 Plus** (not Pro), 6.7" display, iOS 18.
+  - Planning to add an always-on Mac later (Mac mini in mind, parked).
 - **Has not yet reported testing v2.4.1 or v2.5.0**. Last confirmed install was v2.1.x. The CLEAN→REDACT rename, re-identification, semantic search, prompt library, Anthropic cannon, and the PWA/mobile work all shipped this session and are awaiting first real-world test.
 - **Tailscale path**: laid out but not yet installed. Plan is install Tailscale on MBP + iPhone, then the URL in the Settings → Network sharing list with the Tailscale interface name is the "from anywhere" URL.
 - **Icon design**: user asked for a "sexier skulls icon" — v2.5.0 ships a redesigned skull with cyan halo, brow ridge, catchlights in eye sockets, bone-shaped crossbones with rounded epiphyses. If they want another iteration, edit `scripts/make-icons.js` (the SVG is inline in the script) and run `node scripts/make-icons.js`.

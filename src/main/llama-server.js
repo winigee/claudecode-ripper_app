@@ -75,14 +75,17 @@ function buildArgs(model, p) {
   // Keep this list conservative — llamafile's argument parser is stricter than
   // upstream llama-server's. Flags removed in v0.7.4 because llamafile 0.10.1
   // rejected them: --nobrowser, --log-disable.
+  const ctx = config.getContext();
+  const threads = config.defaultThreads();
+  logLine(`context=${ctx} threads=${threads}`);
   return [
     '--server',
     '--host', '127.0.0.1',
     '--port', String(p),
     '-m', model,
-    '-c', '8192',
+    '-c', String(ctx),
     '--gpu', 'disable',
-    '-t', String(Math.max(2, Math.floor(os.cpus().length / 2))),
+    '-t', String(threads),
   ];
 }
 
@@ -227,6 +230,11 @@ function status() {
     modelPath: config.activeModelPath(),
     logFilePath: logFilePath(),
     error: startError ? { message: startError.message, code: startError.code || null } : null,
+    runtime: {
+      context: config.getContext(),
+      threads: config.defaultThreads(),
+      hardware: config.detectHardware(),
+    },
   };
 }
 

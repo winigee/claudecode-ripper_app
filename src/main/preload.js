@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld('bones', {
   modelCancel: () => ipcRenderer.invoke('model:cancel'),
   onModelProgress: (cb) => ipcRenderer.on('model:progress', (_e, p) => cb(p)),
 
+  // Runtime tuning
+  runtimeGet: () => ipcRenderer.invoke('runtime:get'),
+  runtimeSetContext: (n) => ipcRenderer.invoke('runtime:set-context', n),
+
   // Inference
   ping: () => ipcRenderer.invoke('llama:ping'),
   summarise: (payload, runId) => ipcRenderer.invoke('llama:summarise', payload, runId),

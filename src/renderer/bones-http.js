@@ -120,6 +120,10 @@
     modelCancel: () => ({ ok: true }),
     onModelProgress: () => {},
 
+    // Runtime tuning — host only
+    runtimeGet: async () => ({ error: 'host only' }),
+    runtimeSetContext: async () => ({ error: 'host only' }),
+
     // Inference (legacy/non-streaming over web)
     ping: () => POST('/api/llama/ping', {}),
     summarise: async () => ({ error: 'Work tab is only available on the host Mac.' }),

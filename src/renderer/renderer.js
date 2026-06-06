@@ -952,6 +952,42 @@ async function refreshSettings() {
   refreshModelList();
   refreshSharing();
   refreshApiSettings();
+  refreshPerformance();
+}
+
+async function refreshPerformance() {
+  if (!window.bones.runtimeGet) return;
+  let info;
+  try { info = await window.bones.runtimeGet(); } catch (_) { info = { error: 'host only' }; }
+  const sec = $('#setting-perf');
+  if (info && info.error) {
+    if (sec) sec.style.display = 'none';
+    return;
+  }
+  if (sec) sec.style.display = '';
+  const hw = info.hardware || {};
+  const archLabel = hw.arch === 'arm64' ? 'Apple Silicon' : 'Intel x64';
+  $('#perf-hw').textContent =
+    `This Mac: ${hw.ramGB} GB RAM · ${hw.cpus} logical / ${info.threads} physical CPU thread(s) · ${archLabel}.`;
+  $('#perf-context').value = String(info.context);
+  $('#perf-runtime').innerHTML =
+    `Currently running with <strong>${info.context.toLocaleString()}</strong>-token context using <strong>${info.threads}</strong> thread(s). `
+    + `Default for this Mac is <strong>${info.contextDefault.toLocaleString()}</strong>. `
+    + `Changing the window restarts the model.`;
+}
+
+if (document.getElementById('perf-context')) {
+  $('#perf-context').addEventListener('change', async (e) => {
+    const n = Number(e.target.value);
+    setStatus('switching context…', 'warn');
+    const res = await window.bones.runtimeSetContext(n);
+    if (res && res.error) {
+      setStatus('context switch failed: ' + res.error, 'err');
+      return;
+    }
+    setStatus(`context → ${n.toLocaleString()}`, 'warn');
+    setTimeout(refreshSettings, 400);
+  });
 }
 
 async function refreshApiSettings() {

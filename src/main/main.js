@@ -197,6 +197,31 @@ ipcMain.handle('model:set-active', async (event, modelId) => {
 
 ipcMain.handle('model:cancel', () => modelDownload.cancelDownload());
 
+// --- Runtime tuning (context window) ---
+ipcMain.handle('runtime:get', () => ({
+  context: config.getContext(),
+  threads: config.defaultThreads(),
+  hardware: config.detectHardware(),
+  contextChoices: config.CONTEXT_CHOICES,
+  contextDefault: config.defaultContext(),
+}));
+
+ipcMain.handle('runtime:set-context', async (event, n) => {
+  try {
+    config.setContext(n);
+  } catch (e) {
+    return { error: e.message };
+  }
+  // Restart server so the new context takes effect.
+  llamaServer.stop();
+  try { event.sender.send('server:status', llamaServer.status()); } catch (_) {}
+  setImmediate(async () => {
+    try { await llamaServer.start(); } catch (_) {}
+    try { event.sender.send('server:status', llamaServer.status()); } catch (_) {}
+  });
+  return { ok: true, context: config.getContext() };
+});
+
 ipcMain.handle('llama:ping', async () => {
   try {
     return await llama.ping();
