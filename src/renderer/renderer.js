@@ -127,7 +127,10 @@ function applyServerStatus(s) {
   if (s.error) {
     setStatus('server error\ncheck Settings', 'err');
   } else if (state.serverReady) {
-    setStatus('local · ready\nqwen2.5-7b', 'ok');
+    // Show the real active model so the user always knows what's actually
+    // serving requests, not a hardcoded label.
+    const id = s.activeModelId || '';
+    setStatus(`local · ready\n${id}`, 'ok');
   } else if (s.running) {
     setStatus('starting model…', 'warn');
   } else {
@@ -1355,6 +1358,15 @@ async function populateSetupCard() {
   } catch (_) {}
 }
 
+async function setAboutVersion() {
+  if (!window.bones.appVersion) return;
+  try {
+    const v = await window.bones.appVersion();
+    if (v) document.getElementById('about-version').textContent = v;
+  } catch (_) {}
+}
+
 refreshStatus();
 refreshChatList();
 populateSetupCard();
+setAboutVersion();

@@ -104,6 +104,9 @@
   let activeRunId = null;
 
   const bones = {
+    // App — host-only for now (browser doesn't need the canonical version)
+    appVersion: async () => '',
+
     // server lifecycle
     serverStatus: () => GET('/api/server/status'),
     serverStart: () => POST('/api/server/start', {}),

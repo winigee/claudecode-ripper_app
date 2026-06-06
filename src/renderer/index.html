@@ -297,24 +297,32 @@
         </div>
 
         <div class="setting" id="setting-about">
-          <label>About BonesAI v2.7.3</label>
-          <p class="hint">
-            <strong>Local-first.</strong> Inference, search, and redaction all run on this Mac via
-            llamafile + a local model. The one exception is “Send to Claude”, which reaches the
-            Anthropic API on purpose — and only ever with material you have redacted first.
-          </p>
-          <p class="hint">
-            v2.7.0 adds shared Memory (teach Bones once, every local model remembers — optionally
-            synced across your Macs via iCloud) and the SaulLM legal model in the model picker.
-            v2.6.0 added a tunable context window. v2.5.0 made BonesAI installable on iPhone as a PWA.
-          </p>
-          <p class="hint">
-            v2.2.0 added Network sharing — open BonesAI in a browser on other devices on the same
-            Wi-Fi, or over Tailscale for access from anywhere. Token-protected.
-          </p>
-          <p class="hint">
-            Configuration, Brain notes, and chat history live under <code>~/Library/Application Support/BonesAI/</code>.
-          </p>
+          <label>About</label>
+          <div class="about">
+            <div class="about-brand">
+              <svg viewBox="0 0 100 100" width="42" height="42" aria-hidden="true"><use href="#skull-svg"/></svg>
+              <div>
+                <div class="about-name"><span class="brand-bone">BONE</span><span class="brand-ai">SAI</span></div>
+                <div class="about-version">Version <span id="about-version">2.7.4</span></div>
+              </div>
+            </div>
+
+            <p class="hint">
+              <strong>Local-first.</strong> Inference, search, and redaction all run on this Mac via
+              llamafile + a local model. The one exception is “Send to Claude”, which reaches the
+              Anthropic API on purpose — and only ever with material you have redacted first.
+            </p>
+            <p class="hint">
+              Configuration, Brain notes, and chat history live under
+              <code>~/Library/Application Support/BonesAI/</code>.
+            </p>
+
+            <div class="about-credits">
+              <div>Authored by <strong>Winston Green</strong>.</div>
+              <div>Property of <strong>WNSTNGRN Ltd</strong>.</div>
+              <div>All rights reserved. © 2026 WNSTNGRN Ltd.</div>
+            </div>
+          </div>
         </div>
 
         <div class="setting" id="setting-diag">

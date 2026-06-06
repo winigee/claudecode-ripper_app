@@ -135,6 +135,8 @@ function errorPayload(err) {
   return { error: { message: err.message, code: err.code || null } };
 }
 
+ipcMain.handle('app:version', () => app.getVersion());
+
 ipcMain.handle('server:status', () => llamaServer.status());
 
 ipcMain.handle('server:start', async () => {

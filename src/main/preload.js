@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('bones', {
+  // App
+  appVersion: () => ipcRenderer.invoke('app:version'),
+
   // Server / model lifecycle
   serverStatus: () => ipcRenderer.invoke('server:status'),
   serverStart: () => ipcRenderer.invoke('server:start'),
