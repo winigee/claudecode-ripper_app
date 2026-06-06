@@ -339,7 +339,10 @@ async function refreshChatList() {
   }
 }
 
-const FOLDER_SVG = '<svg class="folder-icon" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.5l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+// Folder glyph doubles as the open/closed indicator: filled when the project
+// is expanded, outline when collapsed. No separate caret needed.
+const FOLDER_OPEN = '<svg class="folder-icon open" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.5l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+const FOLDER_CLOSED = '<svg class="folder-icon closed" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h3.5l2 2H19a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
 
 function projectGroup(project, chatsIn, isUnfiled = false, isSub = false) {
   const wrap = document.createElement('div');
@@ -349,8 +352,7 @@ function projectGroup(project, chatsIn, isUnfiled = false, isSub = false) {
   head.className = 'project-head' + (collapsed ? ' collapsed' : '') + (isSub ? ' sub' : '');
   head.dataset.projectId = isUnfiled ? '' : project.id;
   head.innerHTML = `
-    <span class="project-caret">▾</span>
-    ${isUnfiled ? '' : FOLDER_SVG}
+    ${collapsed ? FOLDER_CLOSED : FOLDER_OPEN}
     <span class="project-name"></span>
     <span class="project-count">${chatsIn.length}</span>
     ${isUnfiled ? '' : '<button class="project-menu-btn" title="Project options">⋯</button>'}
