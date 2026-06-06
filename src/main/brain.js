@@ -30,7 +30,7 @@ function listNotes() {
   return load().notes;
 }
 
-function addNote({ title, body, source }) {
+function addNote({ title, body, source, question, prompt, model, kind }) {
   const data = load();
   const note = {
     id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8),
@@ -39,6 +39,12 @@ function addNote({ title, body, source }) {
     body: body || '',
     source: source || null,
   };
+  // Optional structured-brief fields. Notes without these stay readable as
+  // plain notes — backwards-compatible with anything saved before v2.10.0.
+  if (kind) note.kind = kind;
+  if (question) note.question = question;
+  if (prompt) note.prompt = prompt;
+  if (model) note.model = model;
   data.notes.push(note);
   save(data);
   return note;

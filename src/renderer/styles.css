@@ -1183,6 +1183,170 @@ input[type=text]:focus, #paste-area:focus, select:focus {
   color: var(--accent-2);
 }
 
+/* --- Brain (research prompt engine) --- */
+.brain-view { display: flex; flex-direction: column; gap: 4px; }
+.brain-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.brain-toolbar h2 { margin: 0; }
+.brain-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.brain-step {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px;
+  margin: 12px 0;
+}
+.brain-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+}
+#brain-question, #brain-prompt {
+  width: 100%;
+  font-size: 13px;
+  line-height: 1.55;
+  font-family: -apple-system, system-ui, sans-serif;
+}
+#brain-prompt {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12.5px;
+}
+.brain-options { margin-top: 8px; gap: 6px; flex-wrap: wrap; }
+.brain-options input, .brain-options select { flex: 1; min-width: 140px; }
+.brain-send-row { align-items: center; gap: 12px; }
+.brain-response {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  max-height: 460px;
+  overflow-y: auto;
+  min-height: 80px;
+  color: var(--text);
+}
+
+/* Brief list rows */
+.brief {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  border-radius: 4px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+}
+.brief-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+.brief-title {
+  font-weight: 600;
+  font-size: 13.5px;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.brief-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 11px;
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.brief-model {
+  background: rgba(76, 199, 255, 0.12);
+  color: var(--accent);
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 10px;
+}
+.brief-question {
+  font-size: 12px;
+  font-style: italic;
+  color: var(--accent-2);
+  margin: 6px 0 4px;
+}
+.brief-snippet {
+  font-size: 12px;
+  color: var(--text-dim);
+  line-height: 1.5;
+  margin: 4px 0 8px;
+}
+.brief-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+/* Brief detail view */
+.brain-detail { margin-top: 12px; }
+.brief-detail-section {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.brief-detail-head {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 8px;
+  cursor: default;
+}
+details.brief-detail-section summary {
+  list-style: none;
+  cursor: pointer;
+}
+details.brief-detail-section summary::-webkit-details-marker { display: none; }
+details.brief-detail-section summary.brief-detail-head::before {
+  content: "▸ ";
+  font-size: 10px;
+  transition: transform 0.15s;
+  display: inline-block;
+}
+details.brief-detail-section[open] summary.brief-detail-head::before {
+  content: "▾ ";
+}
+.brief-detail-body {
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: -apple-system, system-ui, sans-serif;
+}
+details.brief-detail-section .brief-detail-body {
+  margin-top: 10px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 12px;
+  color: var(--text-dim);
+}
+.brief-detail-q { font-style: italic; color: var(--accent-2); }
+
+.prog-host { margin-top: 8px; }
+
 /* --- About block --- */
 .about {
   background: var(--bg-3);

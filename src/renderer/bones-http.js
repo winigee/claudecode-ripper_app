@@ -166,6 +166,9 @@
     brainAdd: (note) => POST('/api/brain', note),
     brainDelete: (id) => DELETE('/api/brain/' + encodeURIComponent(id)),
 
+    // Prompt engine — host only (needs the local model)
+    promptEngineBuild: async () => ({ error: 'Research prompt engine is only available on the host Mac.' }),
+
     // Shared memory — host only for now (lives on the host filesystem / iCloud)
     memoryList: async () => [],
     memoryAdd: async () => ({ error: 'host only' }),

@@ -392,6 +392,14 @@ window.bones.onToken(({ runId, delta }) => {
     if (cm) bumpStreamMeter(cm, 'Claude streaming');
     return;
   }
+  // Brain research path (Claude API response into the brief area)
+  if (state.tokenSink === 'brain') {
+    const br = $('#brain-response');
+    if (br) { br.textContent += delta; br.scrollTop = br.scrollHeight; }
+    const bm = $('#brain-response-meter');
+    if (bm) bumpStreamMeter(bm, 'Claude researching');
+    return;
+  }
   // Work path
   const out = $('#output');
   if (out) {
@@ -1385,34 +1393,263 @@ $('#btn-save-brain').addEventListener('click', async () => {
   setStatus('saved to Brain', 'ok');
 });
 
+// ===== BRAIN — research prompt engine =====
+// Three views: list of saved briefs, compose new research, detail.
+
+function showBrainView(name) {
+  ['list', 'compose', 'detail'].forEach((v) => {
+    const el = document.getElementById('brain-view-' + v);
+    if (el) el.hidden = (v !== name);
+  });
+}
+
+function resetBrainCompose() {
+  $('#brain-question').value = '';
+  $('#brain-audience').value = '';
+  $('#brain-jurisdiction').value = '';
+  $('#brain-depth').value = '';
+  $('#brain-prompt').value = '';
+  $('#brain-response').textContent = '';
+  $('#brain-step-prompt').hidden = true;
+  $('#brain-step-response').hidden = true;
+  $('#btn-brain-save').disabled = true;
+}
+
 async function refreshBrain() {
   const notes = await window.bones.brainList();
-  $('#brain-count').textContent = `${notes.length} note(s)`;
+  $('#brain-count').textContent = `${notes.length} brief${notes.length === 1 ? '' : 's'}`;
   const list = $('#brain-list');
   if (notes.length === 0) {
-    list.innerHTML = '<p class="muted">No notes yet.</p>';
+    list.innerHTML = '<p class="muted" style="padding:14px 4px">No briefs yet. Click <strong>+ New research</strong> to start one.</p>';
     return;
   }
   list.innerHTML = '';
   for (const n of notes.slice().reverse()) {
+    const isBrief = n.kind === 'brief' || n.question;
+    const snippet = (n.body || '').replace(/\s+/g, ' ').slice(0, 180);
     const div = document.createElement('div');
-    div.className = 'note';
+    div.className = 'brief';
     div.innerHTML = `
-      <div class="note-head">
-        <div class="note-title">${escapeHtml(n.title)}</div>
-        <div class="note-meta">${new Date(n.created_at).toLocaleString()}</div>
+      <div class="brief-head">
+        <div class="brief-title"></div>
+        <div class="brief-meta">
+          <span class="brief-date"></span>
+          ${n.model ? `<span class="brief-model"></span>` : ''}
+        </div>
       </div>
-      <div class="note-body">${escapeHtml(n.body)}</div>
-      <div class="note-actions"><button data-id="${n.id}" class="btn-delete">Delete</button></div>
-    `;
+      ${isBrief && n.question ? '<div class="brief-question"></div>' : ''}
+      <div class="brief-snippet"></div>
+      <div class="brief-actions">
+        <button class="btn-view" data-id="${n.id}">Open</button>
+        <button class="btn-delete" data-id="${n.id}">Delete</button>
+      </div>`;
+    div.querySelector('.brief-title').textContent = n.title || 'Untitled';
+    div.querySelector('.brief-date').textContent = new Date(n.created_at).toLocaleString();
+    if (n.model) div.querySelector('.brief-model').textContent = n.model;
+    if (isBrief && n.question) div.querySelector('.brief-question').textContent = n.question;
+    div.querySelector('.brief-snippet').textContent = snippet + (snippet.length === 180 ? '…' : '');
     list.appendChild(div);
   }
-  $$('.btn-delete').forEach((b) =>
+  list.querySelectorAll('.btn-view').forEach((b) =>
+    b.addEventListener('click', () => openBrief(b.dataset.id))
+  );
+  list.querySelectorAll('.btn-delete').forEach((b) =>
     b.addEventListener('click', async () => {
+      if (!confirm('Delete this brief?')) return;
       await window.bones.brainDelete(b.dataset.id);
       refreshBrain();
     })
   );
+}
+
+async function openBrief(id) {
+  const notes = await window.bones.brainList();
+  const n = notes.find((x) => x.id === id);
+  if (!n) return;
+  $('#brain-detail-title').textContent = n.title || 'Untitled';
+  const root = $('#brain-detail');
+  root.innerHTML = '';
+  if (n.question) {
+    const block = document.createElement('div');
+    block.className = 'brief-detail-section';
+    block.innerHTML = '<div class="brief-detail-head">Research question</div><div class="brief-detail-body brief-detail-q"></div>';
+    block.querySelector('.brief-detail-body').textContent = n.question;
+    root.appendChild(block);
+  }
+  if (n.prompt) {
+    const block = document.createElement('details');
+    block.className = 'brief-detail-section brief-detail-prompt';
+    block.innerHTML = '<summary class="brief-detail-head">Generated research prompt</summary><pre class="brief-detail-body"></pre>';
+    block.querySelector('pre').textContent = n.prompt;
+    root.appendChild(block);
+  }
+  const briefBlock = document.createElement('div');
+  briefBlock.className = 'brief-detail-section';
+  briefBlock.innerHTML = `<div class="brief-detail-head">Brief${n.model ? ` <span class="muted">· ${escapeHtml(n.model)}</span>` : ''} <span class="muted">· ${new Date(n.created_at).toLocaleString()}</span></div><pre class="brief-detail-body"></pre>`;
+  briefBlock.querySelector('pre').textContent = n.body || '';
+  root.appendChild(briefBlock);
+  showBrainView('detail');
+}
+
+// --- Compose flow ---
+
+if (document.getElementById('btn-brain-new')) {
+  $('#btn-brain-new').addEventListener('click', () => {
+    resetBrainCompose();
+    showBrainView('compose');
+    $('#brain-question').focus();
+  });
+  $('#btn-brain-back').addEventListener('click', () => {
+    if ($('#brain-response').textContent.trim() && !confirm('Discard the current research and go back?')) return;
+    showBrainView('list');
+    refreshBrain();
+  });
+  $('#btn-brain-back-from-detail').addEventListener('click', () => {
+    showBrainView('list');
+    refreshBrain();
+  });
+
+  // Step 1 → Step 2: build the research prompt with the local model.
+  $('#btn-brain-build').addEventListener('click', async () => {
+    if (state.currentRunId) return;
+    if (!state.serverReady) { setStatus('model not ready', 'err'); return; }
+    const question = $('#brain-question').value.trim();
+    if (!question) { setStatus('type a research question first', 'err'); return; }
+    const runId = 'pe-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    state.currentRunId = runId;
+    $('#btn-brain-build').disabled = true;
+    $('#btn-brain-build-cancel').hidden = false;
+    renderProgress($('#brain-build-progress'), { pct: null, label: 'Engineering a research prompt with the local model' });
+    setStatus('building prompt…', 'warn');
+    try {
+      const res = await window.bones.promptEngineBuild({
+        question,
+        audience: $('#brain-audience').value,
+        jurisdiction: $('#brain-jurisdiction').value,
+        depth: $('#brain-depth').value,
+      }, runId);
+      if (res && res.error) {
+        setStatus('prompt build failed: ' + res.error, 'err');
+        return;
+      }
+      if (res && res.cancelled) {
+        setStatus('prompt build cancelled', 'warn');
+        return;
+      }
+      $('#brain-prompt').value = res.prompt || '';
+      $('#brain-step-prompt').hidden = false;
+      refreshBrainKeyLabel();
+      $('#brain-prompt').focus();
+      setStatus('prompt ready · review & edit before sending', 'ok');
+    } catch (err) {
+      setStatus('prompt build error: ' + err.message, 'err');
+    } finally {
+      state.currentRunId = null;
+      $('#btn-brain-build').disabled = false;
+      $('#btn-brain-build-cancel').hidden = true;
+      clearProgress($('#brain-build-progress'));
+    }
+  });
+  $('#btn-brain-build-cancel').addEventListener('click', () => {
+    if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+  });
+
+  // Step 2 → Step 3: send the prompt to Claude.
+  $('#btn-brain-send').addEventListener('click', async () => {
+    if (state.currentRunId) return;
+    const promptText = $('#brain-prompt').value.trim();
+    if (!promptText) { setStatus('build or write a prompt first', 'err'); return; }
+    const keyStatus = await window.bones.claudeKeyStatus();
+    if (!keyStatus || !keyStatus.hasKey) {
+      $('#brain-nokey').hidden = false;
+      setStatus('no API key — see Settings → Claude API', 'err');
+      return;
+    }
+    const runId = 'br-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    state.currentRunId = runId;
+    state.tokenSink = 'brain';
+    $('#brain-step-response').hidden = false;
+    $('#brain-response').textContent = '';
+    $('#btn-brain-send').disabled = true;
+    $('#btn-brain-send-cancel').hidden = false;
+    $('#btn-brain-save').disabled = true;
+    resetStreamMeter();
+    const meter = $('#brain-response-meter');
+    if (meter) { meter.hidden = false; meter.innerHTML = ''; }
+    setStatus('researching with Claude…', 'warn');
+    const startedAt = Date.now();
+    try {
+      // No material attached — this is a pure research prompt, not document
+      // analysis. The cannon backend still works fine with material=''.
+      const res = await window.bones.claudeSend({ prompt: promptText, material: '' }, runId);
+      if (res && res.error) {
+        $('#brain-response').textContent += '\n\n[Error: ' + res.error.message + ']';
+        setStatus('Claude error', 'err');
+        return;
+      }
+      const secs = ((Date.now() - startedAt) / 1000).toFixed(1);
+      setStatus(`brief ready · ${res.model || 'done'} · ${secs}s`, 'ok');
+      $('#btn-brain-save').disabled = false;
+      // Stash the model used and the question/prompt so save can persist them.
+      state.brainPending = {
+        question: $('#brain-question').value.trim(),
+        prompt: promptText,
+        body: $('#brain-response').textContent.trim(),
+        model: res.model,
+      };
+    } catch (err) {
+      $('#brain-response').textContent += '\n\n[Error: ' + err.message + ']';
+      setStatus('Claude error', 'err');
+    } finally {
+      state.currentRunId = null;
+      state.tokenSink = null;
+      $('#btn-brain-send').disabled = false;
+      $('#btn-brain-send-cancel').hidden = true;
+      if (meter) meter.hidden = true;
+    }
+  });
+  $('#btn-brain-send-cancel').addEventListener('click', () => {
+    if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+  });
+
+  // Save the brief into Brain storage.
+  $('#btn-brain-save').addEventListener('click', async () => {
+    const p = state.brainPending;
+    if (!p) return;
+    // Title = first 60 chars of the question.
+    const title = (p.question || 'Research brief').replace(/\s+/g, ' ').slice(0, 60);
+    await window.bones.brainAdd({
+      title,
+      body: p.body,
+      question: p.question,
+      prompt: p.prompt,
+      model: p.model,
+      kind: 'brief',
+    });
+    state.brainPending = null;
+    setStatus('brief saved to Brain', 'ok');
+    showBrainView('list');
+    refreshBrain();
+  });
+  $('#btn-brain-discard').addEventListener('click', () => {
+    if (!confirm('Discard this research without saving?')) return;
+    resetBrainCompose();
+    setStatus('discarded', 'warn');
+  });
+}
+
+async function refreshBrainKeyLabel() {
+  const label = $('#brain-model-label');
+  const nokey = $('#brain-nokey');
+  if (!label) return;
+  const st = await window.bones.claudeKeyStatus();
+  if (st && st.hasKey) {
+    label.textContent = `via ${st.model}`;
+    nokey.hidden = true;
+  } else {
+    label.textContent = '';
+    nokey.hidden = false;
+  }
 }
 
 // ===== SETTINGS =====

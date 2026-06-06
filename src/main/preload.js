@@ -60,6 +60,9 @@ contextBridge.exposeInMainWorld('bones', {
   brainAdd: (note) => ipcRenderer.invoke('brain:add', note),
   brainDelete: (id) => ipcRenderer.invoke('brain:delete', id),
 
+  // Prompt engine — builds a research prompt from a question.
+  promptEngineBuild: (payload, runId) => ipcRenderer.invoke('prompt-engine:build', payload, runId),
+
   // Shared memory
   memoryList: () => ipcRenderer.invoke('memory:list'),
   memoryAdd: (text, source) => ipcRenderer.invoke('memory:add', text, source),

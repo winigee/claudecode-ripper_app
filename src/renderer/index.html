@@ -213,11 +213,81 @@
 
       <!-- Brain tab -->
       <section id="tab-brain" class="tab-panel">
-        <div class="brain-toolbar">
-          <h2>Brain</h2>
-          <span id="brain-count" class="muted"></span>
+        <!-- Brain is a research-prompt engine.
+             View 1: list of saved briefs.
+             View 2: compose a new research question, have Bones engineer the
+                     prompt, send it to Claude, capture the brief. -->
+
+        <!-- Brain list view -->
+        <div id="brain-view-list" class="brain-view">
+          <div class="brain-toolbar">
+            <h2>Brain — research briefs</h2>
+            <div class="brain-toolbar-right">
+              <span id="brain-count" class="muted"></span>
+              <button id="btn-brain-new" class="primary">+ New research</button>
+            </div>
+          </div>
+          <p class="hint">Brain takes a research question, uses the local model to engineer a proper research prompt, then fires it at Claude. Briefs come back here as searchable artifacts — citations, sources, the lot. Local-first prompt design; frontier-model research.</p>
+          <div id="brain-list"></div>
         </div>
-        <div id="brain-list"></div>
+
+        <!-- Brain compose view -->
+        <div id="brain-view-compose" class="brain-view" hidden>
+          <div class="brain-toolbar">
+            <h2>New research</h2>
+            <button id="btn-brain-back">← Back to briefs</button>
+          </div>
+
+          <div class="brain-step">
+            <label class="brain-label">1. Research question</label>
+            <textarea id="brain-question" rows="3" placeholder="e.g. How do UK GDPR rules on joint controllers apply to a UK-based SaaS business?"></textarea>
+            <div class="row brain-options">
+              <input id="brain-audience" type="text" placeholder="Audience (e.g. me, client, partner)" />
+              <input id="brain-jurisdiction" type="text" placeholder="Jurisdiction / domain (e.g. UK, EU, US)" />
+              <select id="brain-depth">
+                <option value="">Depth (auto)</option>
+                <option value="quick">Quick overview</option>
+                <option value="thorough">Thorough brief</option>
+                <option value="exhaustive">Exhaustive analysis</option>
+              </select>
+            </div>
+            <div class="row">
+              <button id="btn-brain-build" class="primary">Build research prompt</button>
+              <button id="btn-brain-build-cancel" hidden>Cancel</button>
+            </div>
+            <div id="brain-build-progress" class="prog-host" hidden></div>
+          </div>
+
+          <div id="brain-step-prompt" class="brain-step" hidden>
+            <label class="brain-label">2. Generated prompt <span class="muted">(edit if needed)</span></label>
+            <textarea id="brain-prompt" rows="10" placeholder="The local model will produce a structured research prompt here."></textarea>
+            <div class="row brain-send-row">
+              <span class="muted" id="brain-model-label"></span>
+              <button id="btn-brain-send" class="primary">Send to Claude →</button>
+              <button id="btn-brain-send-cancel" hidden>Cancel</button>
+            </div>
+            <p id="brain-nokey" class="hint" hidden>No API key set. Add one in <strong>Settings → Claude API</strong> to send research.</p>
+          </div>
+
+          <div id="brain-step-response" class="brain-step" hidden>
+            <label class="brain-label">3. Research brief</label>
+            <pre id="brain-response" class="brain-response"></pre>
+            <div id="brain-response-meter" class="streaming-meter" hidden></div>
+            <div class="row">
+              <button id="btn-brain-save" class="primary" disabled>Save brief to Brain</button>
+              <button id="btn-brain-discard">Discard</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Brain detail view -->
+        <div id="brain-view-detail" class="brain-view" hidden>
+          <div class="brain-toolbar">
+            <h2 id="brain-detail-title">Brief</h2>
+            <button id="btn-brain-back-from-detail">← Back to briefs</button>
+          </div>
+          <div id="brain-detail" class="brain-detail"></div>
+        </div>
       </section>
 
       <!-- About tab — top-level. -->

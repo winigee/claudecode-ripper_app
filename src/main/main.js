@@ -13,6 +13,7 @@ const prompts = require('./prompts');
 const claudeApi = require('./claude-api');
 const memory = require('./memory');
 const absorb = require('./absorb');
+const promptEngine = require('./prompt-engine');
 const brain = require('./brain');
 const chats = require('./chats');
 const webServer = require('./web-server');
@@ -458,6 +459,19 @@ ipcMain.handle('absorb:run', async (event, files, runId) => {
     };
     // Absorb returns whatever it managed before any cancel, with cancelled:true.
     return await absorb.absorbFiles(files || [], { onProgress, signal: ctrl.signal });
+  } catch (err) {
+    return errorPayload(err);
+  } finally {
+    activeRuns.delete(runId);
+  }
+});
+
+// --- Prompt engine (Brain → Claude) ---
+ipcMain.handle('prompt-engine:build', async (event, payload, runId) => {
+  const ctrl = new AbortController();
+  activeRuns.set(runId, ctrl);
+  try {
+    return await promptEngine.engineer(payload || {}, { signal: ctrl.signal });
   } catch (err) {
     return errorPayload(err);
   } finally {
