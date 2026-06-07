@@ -26,7 +26,7 @@
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-bone">BONE</span><span class="brand-ai">SAI</span>
-        <span class="brand-version" id="brand-version">v2.15.0</span>
+        <span class="brand-version" id="brand-version">v2.15.1</span>
       </div>
 
       <button id="btn-new-chat" class="new-chat">+ New chat</button>
@@ -334,12 +334,20 @@
 
         <!-- Waiting (URL generated, peer not yet connected) -->
         <div id="bb-view-waiting" class="bb-view" hidden>
-          <h3>Session ready — share the URL</h3>
-          <p class="hint">Send this URL to your friend. When they paste it into their BonesAI BackBones tab and hit Join, the session opens.</p>
-          <div id="bb-urls" class="bb-urls"></div>
-          <p class="hint">Verification code: <span id="bb-fingerprint" class="mono"></span> — once connected, both sides should show the same code. If they don't match, someone's tampered with the URL.</p>
+          <h3>Session ready — share the invite URL</h3>
+          <p class="hint">Send this URL to your friend out-of-band (Signal, iMessage, paper). When they paste it into their BonesAI BackBones tab and hit Join, the session opens. You'll stay on this screen — waiting for them — until then.</p>
+          <div class="row bb-copy-row">
+            <button id="btn-bb-copy" class="primary">📋 Copy invite URL</button>
+            <span id="bb-copy-feedback" class="muted"></span>
+          </div>
+          <details class="bb-url-details">
+            <summary>Show all addresses</summary>
+            <div id="bb-urls" class="bb-urls"></div>
+            <p class="hint">If your friend is on your Tailscale network, use the address with your Tailscale name. On the same Wi-Fi, use the Wi-Fi address. The Copy button above already picks the best one.</p>
+          </details>
+          <p class="hint">Verification code: <span id="bb-fingerprint" class="mono"></span> — once connected, both sides should show the same code. If they don't match, someone tampered with the URL.</p>
           <div class="row">
-            <button id="btn-bb-cancel" class="danger">Cancel</button>
+            <button id="btn-bb-cancel" class="danger">Cancel session</button>
           </div>
         </div>
 

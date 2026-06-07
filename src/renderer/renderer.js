@@ -328,14 +328,33 @@ if (window.bones.onBackBonesMessage) {
   });
 }
 
+// Pick the best address to share: prefer a Tailscale interface (utun* /
+// label contains 'tail' / 100.x), then a LAN address, never localhost.
+function bbBestUrl(urls) {
+  if (!urls || !urls.length) return null;
+  const isLocal = (u) => u.label === 'localhost' || /127\.0\.0\.1/.test(u.url);
+  const isTailscale = (u) => /tail|utun|\/\/100\./i.test(u.label + ' ' + u.url);
+  return (
+    urls.find((u) => isTailscale(u) && !isLocal(u)) ||
+    urls.find((u) => !isLocal(u)) ||
+    urls[0]
+  ).url;
+}
+
 async function bbStart() {
   const res = await window.bones.backbonesStart();
   if (res && res.error) { alert(res.error); return; }
+  bbState.urls = res.urls || [];
+  bbState.bestUrl = bbBestUrl(res.urls);
+
   const urls = document.getElementById('bb-urls');
   urls.innerHTML = '';
+  const copyBtn = document.getElementById('btn-bb-copy');
   if (!res.urls || res.urls.length === 0) {
-    urls.innerHTML = '<p class="muted">Network sharing isn\'t enabled — go to Settings → Sharing → Enable web server, scope: Local network. (You and your friend both need Tailscale running for cross-internet use.)</p>';
+    urls.innerHTML = '<p class="muted">No network address available. Make sure Wi-Fi is on (and Tailscale, for remote).</p>';
+    copyBtn.disabled = true;
   } else {
+    copyBtn.disabled = false;
     for (const u of res.urls) {
       const row = document.createElement('div');
       row.className = 'bb-url-row';
@@ -343,12 +362,13 @@ async function bbStart() {
       row.querySelector('.bb-url-label').textContent = u.label;
       row.querySelector('.bb-url').textContent = u.url;
       row.querySelector('.bb-copy').addEventListener('click', async () => {
-        try { await navigator.clipboard.writeText(u.url); row.querySelector('.bb-copy').textContent = 'copied'; setTimeout(() => row.querySelector('.bb-copy').textContent = 'copy', 1500); } catch (_) {}
+        try { await navigator.clipboard.writeText(u.url); const b = row.querySelector('.bb-copy'); b.textContent = 'copied'; setTimeout(() => b.textContent = 'copy', 1500); } catch (_) {}
       });
       urls.appendChild(row);
     }
   }
   document.getElementById('bb-fingerprint').textContent = res.fingerprint;
+  document.getElementById('bb-copy-feedback').textContent = '';
   bbShowView('waiting');
 }
 
@@ -363,9 +383,24 @@ async function bbJoin() {
   document.getElementById('bb-input').focus();
 }
 
+const bbState = { urls: [], bestUrl: null };
+
 if (document.getElementById('btn-bb-start')) {
   document.getElementById('btn-bb-start').addEventListener('click', bbStart);
   document.getElementById('btn-bb-join').addEventListener('click', bbJoin);
+  // Big "Copy invite URL" — copies the best address, re-copyable any time
+  // while waiting (so you can send it again if the first send failed).
+  document.getElementById('btn-bb-copy').addEventListener('click', async () => {
+    if (!bbState.bestUrl) return;
+    const fb = document.getElementById('bb-copy-feedback');
+    try {
+      await navigator.clipboard.writeText(bbState.bestUrl);
+      fb.textContent = '✓ copied — paste it to your friend';
+      setTimeout(() => { fb.textContent = ''; }, 4000);
+    } catch (_) {
+      fb.textContent = 'copy failed — use "Show all addresses" below';
+    }
+  });
   document.getElementById('bb-join-url').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); bbJoin(); } });
   document.getElementById('btn-bb-cancel').addEventListener('click', async () => { await window.bones.backbonesClose(); bbShowView('idle'); });
   document.getElementById('btn-bb-end').addEventListener('click', async () => {

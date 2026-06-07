@@ -467,14 +467,20 @@ webServer.setBackBonesHandler((ws, initiatorPubB64Unused) => {
   });
 });
 
-ipcMain.handle('backbones:start', () => {
+ipcMain.handle('backbones:start', async () => {
   if (backbones) backbones.close('replaced by new session');
   backbones = new BackBonesSession({ role: 'initiator' });
   bindBackBonesEvents(backbones);
   const cfg = webServer.getWebConfig();
-  // Build a URL the friend can paste. Prefers a Tailscale interface address
-  // (utun*) if present; falls back to listing all non-internal IPv4s so the
-  // user can pick.
+  // A friend can only reach us on a non-localhost address, which requires the
+  // web server to be running in LAN scope (binds 0.0.0.0 and enumerates all
+  // interfaces incl. Tailscale). Bring it up automatically so the host doesn't
+  // have to fiddle with Settings → Sharing first.
+  if (!webServer.info().running || cfg.share !== 'lan') {
+    webServer.updateWebConfig({ share: 'lan' });
+    try { await webServer.restart(); }
+    catch (_) { try { await webServer.start(); } catch (_) {} }
+  }
   const info = webServer.info();
   const urls = (info.urls || []).map((u) => {
     const base = u.url.split('?')[0].replace(/^http/, 'ws') + 'ws/backbones';
