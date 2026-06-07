@@ -1,163 +1,119 @@
-# BonesAI — Session Dump
+# BonesAI — Session Dump / Resume Point
 
-Resume point for the next session in case this one hangs.
-Updated after v2.6.0 (tunable context window / 2019 i9 tuning).
+Read this first if you're a fresh session picking up BonesAI. It's the
+single source of truth for where things stand. Keep it updated as you ship.
+Last updated: after **v2.15.0** (BackBones encrypted P2P chat).
 
 ## Repo & branch
 
-- Repo: `winigee/claudecode-ripper_app`
-- Working branch: `claude/bold-brahmagupta-oekyf` (all commits go here; never push elsewhere without explicit permission)
-- Latest commit: v2.4.1 (`d09ddc3` — re-identification + rename CLEAN → REDACT)
-- User: Winston Green (winstongreen@gmail.com)
+- Repo: `winigee/claudecode-ripper_app` (GitHub MCP tools restricted to this repo)
+- Working branch: **`claude/bold-brahmagupta-oekyf`** — all commits go here. Never push elsewhere.
+- User: Winston Green (winstongreen@gmail.com), founder of **WNSTNGRN Ltd**.
 
-## Latest release
-
-- File: `releases/BonesAI-v2.6.0-mac-x64.app.zip` (~90 MB)
-- **Use SHA-pinned raw URL** (github.com/raw/ redirect chokes on 90 MB): `https://raw.githubusercontent.com/winigee/claudecode-ripper_app/<commit-sha>/releases/BonesAI-v2.6.0-mac-x64.app.zip`
-- Built unsigned (`mac.identity: null`). User installs by right-click → Open the first time to bypass Gatekeeper.
-
-## Build & ship recipe
-
-From repo root:
+## How to ship a release (the ritual, every time)
 
 ```
+cd /home/user/claudecode-ripper_app
 node -e "const p=require('./package.json');p.version='X.Y.Z';require('fs').writeFileSync('./package.json',JSON.stringify(p,null,2)+'\n');"
+sed -i 's/id="brand-version">vPREV</id="brand-version">vX.Y.Z</' src/renderer/index.html
 rm -rf dist
-npx electron-builder --mac --x64 --dir
-# Strip every .lproj except en to keep the bundle small
+npx electron-builder --mac --x64 --dir 2>&1 | tail -2
 APP=dist/mac/BonesAI.app
 LB="$APP/Contents/Frameworks/Electron Framework.framework/Versions/A/Resources"
 for d in "$LB"/*.lproj; do [ "$(basename "$d" .lproj)" != "en" ] && rm -rf "$d"; done
 cd dist/mac && zip -9ryqX "../BonesAI-vX.Y.Z-mac-x64.app.zip" "BonesAI.app" && cd ..
 SHA=$(sha256sum BonesAI-vX.Y.Z-mac-x64.app.zip | awk '{print $1}')
 echo "$SHA  BonesAI-vX.Y.Z-mac-x64.app.zip" > BonesAI-vX.Y.Z-mac-x64.app.zip.sha256
-# Replace previous release in /releases, commit, push to claude/bold-brahmagupta-oekyf.
+cd /home/user/claudecode-ripper_app
+rm -f releases/BonesAI-vPREV-mac-x64.app.zip releases/BonesAI-vPREV-mac-x64.app.zip.sha256
+cp dist/BonesAI-vX.Y.Z-mac-x64.app.zip releases/ ; cp dist/BonesAI-vX.Y.Z-mac-x64.app.zip.sha256 releases/
+git add -A && git commit -m "..." && git push -u origin claude/bold-brahmagupta-oekyf
 ```
 
-GitHub warns about >50 MB file size (`GH001`). Ignore — user is OK with this for now and doesn't want LFS.
+- **Download link format** (the github.com/raw/ redirect chokes on 90 MB; use raw.githubusercontent pinned to the commit SHA):
+  `https://raw.githubusercontent.com/winigee/claudecode-ripper_app/<SHORT_SHA>/releases/BonesAI-vX.Y.Z-mac-x64.app.zip`
+  Always verify with `curl -sIL <url> | grep -iE "^HTTP|content-type"` → expect `HTTP/2 200`, `application/zip`.
+- Only keep ONE release zip in `releases/` at a time (delete the previous).
+- Build is unsigned (`mac.identity: null`). User installs by **right-click → Open** the first time (Sonoma Gatekeeper). prompt() is unsupported in Electron — use the in-app showInput() modal instead. confirm()/alert() are fine.
+- Commit message footer: `https://claude.ai/code/session_01PiionwEvz4MiKx61i9eraD` (do NOT put the model id anywhere in commits/PRs/code).
 
-## What ships in BonesAI today (v2.4.1)
+## Current release
 
-A local-first macOS Electron app. All the inference work runs on the user's Mac via llamafile + a downloadable local model. One feature deliberately reaches the network (Claude API). Tabs: Chat / Work / Brain / Settings.
-
-### Chat tab
-- Streaming chat against the local model
-- Persistent chat history (`chats.js` → `~/Library/Application Support/BonesAI/chats/*.json`)
-- Sidebar list with delete, new-chat button
-- ⌘↩ to send, spinning skull while replying
-
-### Work tab
-1. **Drop / pick files or folder** → `ingest.js` (txt/md/json/csv/log/pdf/docx, ≤5 MB, ≤200 files)
-2. **Find documents** (semantic search, v2.3.0)
-   - `docsearch.js` — three-stage pipeline:
-     1. Local model expands the query into related terms
-     2. Lexical ranking over every loaded doc (chunked, term-coverage + phrase bonuses)
-     3. Local model judges the top candidates: strong / possible / weak / none
-   - "Expand query with related terms" checkbox — off = literal only
-3. **Redact & send to Claude** (the "cannon", v2.4.0 + v2.4.1 re-identification)
-   - **REDACT button**: `redact.js`. Two passes:
-     - Deterministic regex: emails, phones (digit-count gated), street addresses, PO boxes, UK postcodes, companies with legal suffixes (Ltd/Inc/LLC/PLC/GmbH…), titled people (Mr/Dr/Ms…)
-     - Optional local-model NER pass for plain names regex misses (toggle)
-   - Consistent pseudonyms: same entity → same `[PERSON_1]` / `[COMPANY_2]` token throughout
-   - Editable redacted-text box (review before sending)
-   - **Renderer holds `state.redactMap` = `{placeholder: original}` in memory only — never written to disk, wiped on reload/quit/re-redact**
-   - **Prompt library** (`prompts.js`): 8 built-in prompts + user-saved ones (in `config.json` under `prompts`). `{{variable}}` syntax → renderer renders a labelled field per variable.
-   - **Send to Claude** (`claude-api.js`): streams the Anthropic Messages SSE (`content_block_delta`). API key in `config.json` mode 0600.
-   - Models exposed: Opus 4.8 / Sonnet 4.6 / Haiku 4.5 (default Sonnet 4.6).
-   - **Auto re-identification**: after the response, `[TYPE_N]` tokens are swapped back to real names. Toggle button to flip between redacted/re-identified views. Save-to-Brain saves whichever view is on screen.
-4. **Summarise / Compact** (older, still there) — structured summary or dense compaction, streams locally, save-to-Brain.
-
-### Brain tab
-- Stored notes (`brain.js` → `notes.json`)
-- Title, body, source files, created_at; delete
-
-### Settings tab
-- Active model status + restart server
-- **Network sharing** (v2.2.0): HTTP server (`web-server.js`) on `8765`, token-protected, localhost-only or 0.0.0.0 LAN. URLs list per interface (Wi-Fi, Tailscale).
-- **Claude API** (v2.4.0): paste key (sk-ant-…), choose model. Last-4 shown after save.
-- **Available models**: download/switch/delete Phi-3.5-mini / Qwen 7B / Qwen 14B / Qwen 32B.
-- Diagnostics: llama-server log tail.
-
-### Mobile / web — installable PWA (v2.5.0)
-- Same renderer served via in-app HTTP. Detects browser vs Electron at `index.html` top — falls back to `bones-http.js` HTTP/SSE client when `window.bones` isn't injected by preload.
-- **Installable**: open the URL in Safari → Share → Add to Home Screen. Launches fullscreen with the BonesAI skull icon, no Safari chrome.
-- **Layout**: bottom tab bar (Chat/Work/Brain/Settings) for mobile width ≤760 px; sidebar becomes a Chats drawer accessed via "☰ Chats" pill at top-left. Thin top bar shows brand + live status.
-- **Safe-area handling**: `env(safe-area-inset-*)` everywhere chrome lives, so Dynamic Island and home indicator are respected. `100dvh` for dynamic viewport.
-- **iOS specifics**: `apple-mobile-web-app-capable`, `black-translucent` status bar, `theme-color`, manifest with `display: standalone`, viewport `viewport-fit=cover`. Inputs ≥16 px font-size so iOS doesn't zoom on focus.
-- **Icons**: `src/renderer/icons/` — generated by `scripts/make-icons.js` (sharp). 32/180/192/512 PNG + maskable variants + standalone SVG. Source: in-script SVG; regenerate by editing the script and running `node scripts/make-icons.js`.
-- **Cookie auth fix (v2.5.0)**: when the URL carries `?t=TOKEN`, the server now sets a `bones-session` cookie so subresources (CSS, JS, manifest, icons) load. Previously only the first HTML hit worked — a latent bug from v2.2.0.
-- Browser stubs: Work, model management, docsearch, redact, cannon, prompt library, API settings, sharing UI all return "host only" — those features only work in the desktop app.
-
-### Mobile install steps (for user)
-1. On the MBP host, Settings → Network sharing → Enable web server, scope = Local network.
-2. Copy the LAN or Tailscale URL.
-3. On iPhone (iOS 18, Safari), open the URL. Tap Share → Add to Home Screen → name "BonesAI" → Add.
-4. Tap the home-screen icon — opens fullscreen.
-5. Session cookie persists 7 days, so the URL doesn't need re-pasting.
+- **v2.15.0** — commit `0ef2c7e`.
+- `releases/BonesAI-v2.15.0-mac-x64.app.zip` (~90 MB).
 
 ## Architecture map
 
 ```
 src/main/
-  main.js          — Electron entry, IPC handlers
-  preload.js       — context bridge exposing window.bones
-  config.js        — config.json (mode 0600), model registry, hw detect
-  llama-server.js  — spawns llamafile via /bin/bash, /health probe loop
-  llama.js         — chat/summarise/compact/ping + complete() helper
-  ingest.js        — file walker + readers (pdf-parse, mammoth)
-  docsearch.js     — semantic doc search pipeline (v2.3.0)
-  redact.js        — regex + local-model NER de-identification
-  prompts.js       — built-in + user prompt library, {{vars}}
-  claude-api.js    — Anthropic Messages SSE streaming cannon
-  brain.js         — notes CRUD
-  chats.js         — chat history CRUD
-  model-download.js
-  web-server.js    — HTTP server for browser/mobile (v2.2.0)
+  main.js          Electron entry, ALL ipcMain handlers, BackBones session glue
+  preload.js       contextBridge → window.bones.*
+  config.js        config.json (mode 0600); model registry; hardware detect; context window (getContext/setContext, 4K/8K/16K/32K, default by RAM); defaultThreads; findInstalledFile (scans models dir for any matching .gguf)
+  llama-server.js  spawns llamafile via /bin/bash; /health probe; log rotation (5MB→.old); status() exposes runtime {context,threads,hardware}
+  llama.js         chatStream (temp param), summarise, compact, chat (injects memory), complete (non-streaming), ping
+  ingest.js        file walker + readers (pdf-parse, mammoth); txt/md/json/csv/log/pdf/docx, ≤5MB, ≤200 files
+  docsearch.js     "Find documents": query-expand → lexical rank → model judge; partial-on-cancel
+  redact.js        regex + local-model NER de-identification; consistent [PERSON_1] placeholders; partial-on-cancel
+  prompts.js       cannon prompt library: 8 builtins + user prompts; {{vars}}
+  claude-api.js    Anthropic Messages SSE; send() takes {prompt,material} OR {messages:[...]}; key in config.json
+  memory.js        shared Memory (injected into every local chat); local OR iCloud Drive (~/Library/Mobile Documents/com~apple~CloudDocs/BonesAI/memory.json); add/addMany(text,source)/remove/injectionText/setICloud
+  absorb.js        turn docs → Memory facts; chunk → model extract → dedupe; partial-on-cancel
+  prompt-engine.js Brain research-prompt engineer (local model builds a structured prompt)
+  brain.js         saved briefs store (brain.json); addNote takes optional question/prompt/model/kind
+  chats.js         chat CRUD; list() CACHED (invalidate() on every write); search(query) title+body+snippet; project_id; setProject
+  projects.js      projects.json; add(name,parentId)/rename/remove(cascade); one-level nesting enforced
+  model-download.js HF download w/ redirects; friendly 401/403; deleteModel uses findInstalledFile
+  backbones.js     BackBonesSession: X25519 ephemeral + AES-256-GCM; in-RAM only; close() zeroises keys
+  web-server.js    HTTP server for browser/PWA; STATIC_CACHE (in-mem); bones-session cookie auth; WebSocketServer at /ws/backbones; setBackBonesHandler
 
 src/renderer/
-  index.html       — single page, all tabs, Electron-or-browser detect
-  renderer.js      — all UI logic
-  bones-http.js    — HTTP fallback transport for browser
-  styles.css       — dark theme, skull SVG, mobile breakpoints
+  index.html       single page; tabs: Chat/Work/Absorb/Brain/BackBones/Settings/About; mobile bottom-nav (7 cols)
+  renderer.js      ~2800 LOC, all UI logic; showInput()+showContextMenu() (Electron has no prompt); rAF-coalesced streaming bubble
+  bones-http.js    HTTP/SSE transport when served to a browser; host-only stubs for desktop-only features
+  styles.css       dark navy/cyan theme; ~1500 LOC
+  icons/           GEOMETRIC svg skull (icon.svg) + generated PNGs. Source of inline skull = <symbol id="skull-svg"> in index.html
+  manifest.webmanifest  PWA
+scripts/make-icons.js   regenerates all icons from the geometric SVG (sharp). Run: node scripts/make-icons.js
+build/icon.png          1024 macOS app icon (rounded skull) → electron-builder makes .icns
 ```
 
-## User state / preferences
+## Feature inventory (what exists, by tab)
 
-- **Hardware**:
-  - **2014 MBP** — original host. Wants iPhone + other Macs to reach BonesAI.
-  - **2019 MacBook Pro 15"** — i9 2.3 GHz 8C/16T, 16 GB DDR4-2400, Intel UHD 630, macOS Sonoma 14.3.1. v2.6.0 detects this profile and gives 16K context + 8 physical threads by default.
-  - **iPhone 16 Plus** (not Pro), 6.7" display, iOS 18.
-  - Planning to add an always-on Mac later (Mac mini in mind, parked).
-- **Has not yet reported testing v2.4.1 or v2.5.0**. Last confirmed install was v2.1.x. The CLEAN→REDACT rename, re-identification, semantic search, prompt library, Anthropic cannon, and the PWA/mobile work all shipped this session and are awaiting first real-world test.
-- **Tailscale path**: laid out but not yet installed. Plan is install Tailscale on MBP + iPhone, then the URL in the Settings → Network sharing list with the Tailscale interface name is the "from anywhere" URL.
-- **Icon design**: user asked for a "sexier skulls icon" — v2.5.0 ships a redesigned skull with cyan halo, brow ridge, catchlights in eye sockets, bone-shaped crossbones with rounded epiphyses. If they want another iteration, edit `scripts/make-icons.js` (the SVG is inline in the script) and run `node scripts/make-icons.js`.
-- **Always-on Mac decision**: parked. Brevity hosting migration (separate context) also parked.
+- **Chat** — local-model streaming chat. Persistent history. Context-window meter at top (fresh/warm/tired/spent). **Ask Claude →** button (⌘⇧↩): redacts the whole convo, sends multi-turn to Claude, re-identifies the reply live, tags bubble in **Claude orange** with a spinning **Claude scintilla** (star) instead of the skull. Local replies tagged with active model id.
+- **Work** — drop files (dup-detection: Replace/Keep both/Cancel). Summarise / Compact. **Find documents** (semantic). **Redact & send to Claude** (the "cannon"): regex+model redaction → review editable box → prompt library → stream → auto re-identify. Loaded-files card with per-row remove.
+- **Absorb** — own tab + own dropzone. Extract facts from docs → review modal (tick to keep) → save to Memory with source attribution. Partial-on-cancel.
+- **Brain** — research-prompt engine. Question → local model engineers a structured prompt → editable → send to Claude → brief streams in → save. List/compose/detail views. Saved briefs carry question+prompt+model+body.
+- **BackBones** (v2.15.0) — encrypted ephemeral P2P chat between two BonesAI instances over Tailscale. X25519+AES-256-GCM, fresh keys/session, nothing persisted, terminal-style UI, verification fingerprint, 30-min idle timeout. Host-only (needs WS server).
+- **Settings** — sub-nav PILLS act as tabs (one card shown at a time): Memory / Model / Performance / Models / Claude API / Sharing / Help & FAQ / Diagnostics. Memory (teach + iCloud toggle). Performance (context window). Available models (download/activate/delete + Re-scan + Open folder). Claude API key. Network sharing (token, localhost/LAN, URLs). Help & FAQ (accordion). Diagnostics (log tail + **Export log**).
+- **About** — own top-level tab. Skull, version (live from app.getVersion), Founder portrait (`src/renderer/about/winston.jpg`), credits: Authored by Winston Green / Property of WNSTNGRN Ltd / All rights reserved © 2026.
 
-## Open / pending decisions
+## Models in the registry (config.js MODELS)
 
-- **v2.5.0 candidates** (none committed):
-  - More entity types in REDACT (US ZIPs, IBANs, dates of birth, NINOs, SSNs)
-  - Better folder ingest UX (progress bar for big folders, recurse depth control)
-  - Push notifications when a long Claude response finishes (would need a service worker on the iPhone PWA — non-trivial)
-  - Work tab over the web (requires shipping a host-side file picker via HTTP, plus thinking through privacy of doing redact remotely)
-  - Tailscale auto-detect that picks Tailscale URL by default in the Settings sharing UI
-- **Real-world feedback wanted** on:
-  - REDACT recall: what names slip through the regex + local-model pass on real docs
-  - Find documents tuning: too strict / too loose, snippet positioning
-  - The 7B model on the 2014 MBP — speed, RAM headroom
+phi-3.5-mini, qwen-7b (default), **saul-7b** (legal, TheBloke ungated GGUF), qwen-14b, qwen-32b.
+- HuggingFace is FIREWALLED in the build env — can't verify model URLs here. If a download 404/401s, user pastes the working GGUF URL and we patch config.js.
+- `findInstalledFile()` scans the models folder for any `.gguf` matching the id tokens, so a manually-dropped file with a different name still gets detected (+ "Re-scan models folder" button + "Open folder").
 
-## House style I've been following
+## User state / hardware / preferences
 
-- Local-first by default; the cannon is the one deliberate exception.
-- No unnecessary comments. Only where the WHY isn't obvious from the code.
-- Tight, focused commits. Big multi-paragraph commit messages explaining intent.
-- No `gh` CLI in this environment — use the `mcp__github__*` tools for GitHub operations (PR commenting, etc.).
-- User asked for short, direct responses; long explanations only when shipping a release.
-- Don't push without testing — usually a syntax check + a node-level unit test of any new module.
+- **Macs**: 2014 MBP (original host) and **2019 MBP 15" i9 8C/16T, 16 GB, Intel UHD 630, Sonoma 14.3.1** (current main). Both x64/AVX2/CPU-only. v2.6.0 auto-tunes: 16K context + 8 threads on the i9.
+- **iPhone 16 Plus** (not Pro), iOS 18 — PWA install works (Add to Home Screen).
+- Wants: iPhone + friend access. Plans an always-on Mac eventually (parked).
+- **Claude API key persists** across installs (lives in config.json under userData, not the app bundle). Same for chats/brain/memory/models.
+- **Aesthetic**: dark navy + cyan. Claude features = Claude **orange** (#d97757), NOT purple (user flagged purple as wrong). Logos are the GEOMETRIC SVG skull — user rejected the photographic Gemini artwork (had a grey box, looked bad). Folder open=filled, closed=outline.
+- Legal practitioner (UK). Uses Bones for legal research/document work. Decided **against RAG**. Fine-tuning isn't feasible on Intel Mac (told them; Absorb is the local alternative).
 
-## How to resume
+## Open threads / parked
 
-1. `git log --oneline -10` — see recent commits.
-2. `git status` — should be clean if v2.4.1 push went through.
-3. Ask the user what they want next; don't assume.
-4. If continuing this STATE.md, update it as work progresses so it stays current.
+- Tailscale: user laid the groundwork but not confirmed installed. BackBones needs it for cross-internet.
+- v2.15.0 BackBones not yet field-tested by user (needs a friend + both on Tailscale).
+- Always-on Mac purchase — parked.
+- Possible future: Work/Absorb over web (currently host-only), push notifications for long jobs, Tailscale auto-detect in Sharing UI.
+
+## Working style the user likes
+
+- Ship a real downloadable build for almost every change; give the SHA-pinned raw link + verify HTTP 200.
+- Be honest about tradeoffs and limits (esp. privacy/security claims — never overstate).
+- Test new main-process modules with a quick node script before shipping.
+- Tight, focused commits with thorough multi-paragraph messages.
+- Short chat replies; longer only when shipping/explaining a release.
+- Update THIS file when context runs low.
