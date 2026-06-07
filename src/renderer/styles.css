@@ -201,6 +201,106 @@ body {
 .project-body { padding-left: 6px; }
 .project-empty { font-size: 11px; padding: 4px 12px; font-style: italic; }
 
+/* --- BackBones (encrypted P2P chat) --- */
+.bb-view { display: flex; flex-direction: column; gap: 12px; flex: 1; min-height: 0; }
+.bb-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 14px; }
+@media (max-width: 760px) { .bb-actions { grid-template-columns: 1fr; } }
+.bb-action-card {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px;
+}
+.bb-action-card h3 { margin: 0 0 4px; font-size: 14px; color: var(--accent); }
+.bb-urls {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11.5px;
+}
+.bb-url-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+.bb-url-label { color: var(--muted); width: 80px; flex-shrink: 0; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; }
+.bb-url { flex: 1; color: var(--accent-2); word-break: break-all; }
+.bb-copy { padding: 3px 10px; font-size: 11px; }
+.mono { font-family: ui-monospace, Menlo, monospace; color: var(--accent); }
+.bb-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: #050a14;
+  border: 1px solid var(--accent-dim);
+  border-radius: 5px;
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--accent);
+}
+.bb-status-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); animation: pulse 1.5s ease-in-out infinite; flex-shrink: 0; }
+.bb-header-text { flex: 1; }
+.bb-fp { color: var(--muted); text-transform: none; letter-spacing: 0.3px; font-size: 10.5px; }
+.bb-terminal {
+  flex: 1;
+  background: #050a14;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 12px;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12.5px;
+  line-height: 1.55;
+  color: #aee0ff;
+  overflow-y: auto;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  min-height: 280px;
+}
+.bb-line { display: flex; gap: 6px; align-items: baseline; padding: 1px 0; }
+.bb-time { color: var(--muted); font-size: 11px; flex-shrink: 0; }
+.bb-tag { color: var(--accent); flex-shrink: 0; }
+.bb-text { color: #d8eaff; word-break: break-word; min-width: 0; }
+.bb-line.bb-them .bb-tag { color: #ffb088; }
+.bb-line.bb-them .bb-text { color: #ffdfcc; }
+.bb-line.bb-me .bb-tag { color: var(--accent-2); }
+.bb-line.bb-sys .bb-tag, .bb-line.bb-sys .bb-text { color: var(--muted); font-style: italic; }
+.bb-form {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #050a14;
+  border: 1px solid var(--accent-dim);
+  border-radius: 5px;
+  padding: 8px 10px;
+  font-family: ui-monospace, Menlo, monospace;
+}
+.bb-form .bb-prompt { color: var(--accent); font-weight: 700; }
+.bb-form input {
+  flex: 1;
+  background: transparent;
+  border: 0;
+  color: #d8eaff;
+  font-family: inherit;
+  font-size: 13px;
+  caret-color: var(--accent);
+}
+.bb-form input:focus { outline: none; }
+.bb-form .bb-send {
+  background: transparent;
+  border: 1px solid var(--accent-dim);
+  color: var(--accent);
+  width: 30px;
+  padding: 0;
+  font-size: 16px;
+}
+.bb-form .bb-send:hover { background: rgba(76, 199, 255, 0.1); }
+.bb-warning { font-size: 11px; color: var(--warn); font-style: italic; }
+button.danger { color: var(--err); border-color: var(--err); background: transparent; }
+button.danger:hover { background: rgba(255, 123, 123, 0.1); }
+button.small { padding: 3px 10px; font-size: 11px; min-height: 0; }
+
 /* Right-click context menu */
 .ctx-menu {
   position: fixed;
@@ -1880,7 +1980,7 @@ details.brief-detail-section .brief-detail-body {
   /* Bottom tab bar */
   .bottom-nav {
     display: grid;
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(7, 1fr);
     position: fixed;
     left: 0; right: 0; bottom: 0;
     z-index: 7;

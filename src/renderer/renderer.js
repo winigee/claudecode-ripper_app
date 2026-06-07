@@ -281,6 +281,108 @@ $('#btn-cancel-download').addEventListener('click', () => window.bones.modelCanc
 // Note: onModelProgress is wired below, in the Settings section. Single handler
 // covers both the setup-screen progress bar and the per-card download bars.
 
+// ===== BACKBONES (encrypted peer-to-peer chat) =====
+// Strictly ephemeral. Three views: idle (start/join), waiting (URL to share),
+// active (terminal-style chat). Renderer holds no state about closed sessions.
+
+function bbShowView(name) {
+  ['idle', 'waiting', 'active'].forEach((v) => {
+    const el = document.getElementById('bb-view-' + v);
+    if (el) el.hidden = (v !== name);
+  });
+}
+
+function bbAppendLine({ from, text, sys = false }) {
+  const term = document.getElementById('bb-terminal');
+  if (!term) return;
+  const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  const tag = sys ? '* ' : (from === 'me' ? '> me: ' : '< friend: ');
+  const cls = sys ? 'bb-sys' : (from === 'me' ? 'bb-me' : 'bb-them');
+  const line = document.createElement('div');
+  line.className = 'bb-line ' + cls;
+  line.innerHTML = `<span class="bb-time">[${t}]</span><span class="bb-tag">${tag}</span><span class="bb-text"></span>`;
+  line.querySelector('.bb-text').textContent = text;
+  term.appendChild(line);
+  term.scrollTop = term.scrollHeight;
+}
+
+if (window.bones.onBackBonesMessage) {
+  window.bones.onBackBonesMessage((m) => bbAppendLine(m));
+  window.bones.onBackBonesUpdate((s) => {
+    if (!s) { bbShowView('idle'); return; }
+    if (s.connected) {
+      const sfp = document.getElementById('bb-shared-fp');
+      if (sfp && s.sharedFingerprint) sfp.textContent = 'verify: ' + s.sharedFingerprint;
+      bbShowView('active');
+    }
+  });
+  window.bones.onBackBonesClosed(({ reason }) => {
+    bbAppendLine({ from: 'system', text: 'session ended: ' + reason, sys: true });
+    // Wipe the terminal after a beat so the closure is acknowledged, then
+    // return to idle. Holds nothing in renderer state.
+    setTimeout(() => {
+      const term = document.getElementById('bb-terminal');
+      if (term) term.innerHTML = '';
+      bbShowView('idle');
+    }, 1500);
+  });
+}
+
+async function bbStart() {
+  const res = await window.bones.backbonesStart();
+  if (res && res.error) { alert(res.error); return; }
+  const urls = document.getElementById('bb-urls');
+  urls.innerHTML = '';
+  if (!res.urls || res.urls.length === 0) {
+    urls.innerHTML = '<p class="muted">Network sharing isn\'t enabled — go to Settings → Sharing → Enable web server, scope: Local network. (You and your friend both need Tailscale running for cross-internet use.)</p>';
+  } else {
+    for (const u of res.urls) {
+      const row = document.createElement('div');
+      row.className = 'bb-url-row';
+      row.innerHTML = `<span class="bb-url-label"></span><code class="bb-url"></code><button class="bb-copy">copy</button>`;
+      row.querySelector('.bb-url-label').textContent = u.label;
+      row.querySelector('.bb-url').textContent = u.url;
+      row.querySelector('.bb-copy').addEventListener('click', async () => {
+        try { await navigator.clipboard.writeText(u.url); row.querySelector('.bb-copy').textContent = 'copied'; setTimeout(() => row.querySelector('.bb-copy').textContent = 'copy', 1500); } catch (_) {}
+      });
+      urls.appendChild(row);
+    }
+  }
+  document.getElementById('bb-fingerprint').textContent = res.fingerprint;
+  bbShowView('waiting');
+}
+
+async function bbJoin() {
+  const input = document.getElementById('bb-join-url');
+  const url = input.value.trim();
+  if (!url) return;
+  const res = await window.bones.backbonesJoin(url);
+  if (res && res.error) { alert(res.error); return; }
+  bbAppendLine({ from: 'system', text: 'connected · session ' + res.sessionId, sys: true });
+  bbShowView('active');
+  document.getElementById('bb-input').focus();
+}
+
+if (document.getElementById('btn-bb-start')) {
+  document.getElementById('btn-bb-start').addEventListener('click', bbStart);
+  document.getElementById('btn-bb-join').addEventListener('click', bbJoin);
+  document.getElementById('bb-join-url').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); bbJoin(); } });
+  document.getElementById('btn-bb-cancel').addEventListener('click', async () => { await window.bones.backbonesClose(); bbShowView('idle'); });
+  document.getElementById('btn-bb-end').addEventListener('click', async () => {
+    if (!confirm('End the session? All messages will be wiped.')) return;
+    await window.bones.backbonesClose();
+  });
+  document.getElementById('bb-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const input = document.getElementById('bb-input');
+    const text = input.value.trim();
+    if (!text) return;
+    const res = await window.bones.backbonesSend(text);
+    if (res && res.error) { alert(res.error); return; }
+    input.value = '';
+  });
+}
+
 // ===== CHAT =====
 
 // Which project groups are collapsed (by id; '_unfiled' for the catch-all).

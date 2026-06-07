@@ -212,6 +212,16 @@
       });
     },
 
+    // BackBones — host only (encrypted P2P relies on the host's WS server)
+    backbonesStart: async () => ({ error: 'BackBones is only available on the host Mac.' }),
+    backbonesJoin: async () => ({ error: 'host only' }),
+    backbonesSend: async () => ({ error: 'host only' }),
+    backbonesClose: async () => ({ ok: true }),
+    backbonesStatus: async () => null,
+    onBackBonesMessage: () => {},
+    onBackBonesUpdate: () => {},
+    onBackBonesClosed: () => {},
+
     // Network sharing — host only
     webInfo: async () => ({ error: 'host only' }),
     webStart: async () => ({ error: 'host only' }),

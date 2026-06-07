@@ -91,6 +91,16 @@ contextBridge.exposeInMainWorld('bones', {
   projectsRename: (id, name) => ipcRenderer.invoke('projects:rename', { id, name }),
   projectsDelete: (id) => ipcRenderer.invoke('projects:delete', id),
 
+  // BackBones (encrypted P2P chat)
+  backbonesStart: () => ipcRenderer.invoke('backbones:start'),
+  backbonesJoin: (url) => ipcRenderer.invoke('backbones:join', url),
+  backbonesSend: (text) => ipcRenderer.invoke('backbones:send', text),
+  backbonesClose: () => ipcRenderer.invoke('backbones:close'),
+  backbonesStatus: () => ipcRenderer.invoke('backbones:status'),
+  onBackBonesMessage: (cb) => ipcRenderer.on('backbones:message', (_e, m) => cb(m)),
+  onBackBonesUpdate: (cb) => ipcRenderer.on('backbones:update', (_e, s) => cb(s)),
+  onBackBonesClosed: (cb) => ipcRenderer.on('backbones:closed', (_e, p) => cb(p)),
+
   // Network sharing
   webInfo: () => ipcRenderer.invoke('web:info'),
   webStart: () => ipcRenderer.invoke('web:start'),

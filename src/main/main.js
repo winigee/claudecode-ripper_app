@@ -18,6 +18,7 @@ const brain = require('./brain');
 const chats = require('./chats');
 const projects = require('./projects');
 const webServer = require('./web-server');
+const { BackBonesSession } = require('./backbones');
 
 let mainWindow = null;
 const activeRuns = new Map();
@@ -421,6 +422,150 @@ ipcMain.handle('ingest:pick-folder', async () => {
   if (result.canceled) return { files: [], skipped: [] };
   return ingest.ingestPaths(result.filePaths);
 });
+
+// --- BackBones (encrypted peer-to-peer chat) ---
+//
+// A single session at a time (you're chatting with one friend, not many).
+// All in-memory. The renderer drives the lifecycle via IPC.
+
+let backbones = null; // current BackBonesSession or null
+
+function emitBackBonesUpdate() {
+  try {
+    if (mainWindow) mainWindow.webContents.send('backbones:update', backbones ? backbones.status() : null);
+  } catch (_) {}
+}
+function bindBackBonesEvents(session) {
+  session.on('message', (m) => {
+    try { if (mainWindow) mainWindow.webContents.send('backbones:message', m); } catch (_) {}
+    emitBackBonesUpdate();
+  });
+  session.on('connected', emitBackBonesUpdate);
+  session.on('closed', (reason) => {
+    try { if (mainWindow) mainWindow.webContents.send('backbones:closed', { reason }); } catch (_) {}
+    backbones = null;
+    emitBackBonesUpdate();
+  });
+}
+
+// Incoming connection (we're the initiator; a friend joined our URL).
+webServer.setBackBonesHandler((ws, initiatorPubB64Unused) => {
+  if (!backbones || backbones.role !== 'initiator') {
+    try { ws.close(1008, 'no session waiting'); } catch (_) {}
+    return;
+  }
+  backbones.attachPeer(ws);
+  // The joiner sends 'hello' with its pubkey; we respond with our own so they
+  // can derive the shared secret too.
+  ws.on('message', (data) => {
+    try {
+      const j = JSON.parse(data.toString('utf8'));
+      if (j && j.t === 'hello' && j.k && !backbones._sharedKey) {
+        backbones.sendHandshake(); // send ours back
+      }
+    } catch (_) {}
+  });
+});
+
+ipcMain.handle('backbones:start', () => {
+  if (backbones) backbones.close('replaced by new session');
+  backbones = new BackBonesSession({ role: 'initiator' });
+  bindBackBonesEvents(backbones);
+  const cfg = webServer.getWebConfig();
+  // Build a URL the friend can paste. Prefers a Tailscale interface address
+  // (utun*) if present; falls back to listing all non-internal IPv4s so the
+  // user can pick.
+  const info = webServer.info();
+  const urls = (info.urls || []).map((u) => {
+    const base = u.url.split('?')[0].replace(/^http/, 'ws') + 'ws/backbones';
+    return {
+      label: u.label,
+      url: `${base}?init=${backbones.publicKeyB64}&t=${cfg.token}`,
+    };
+  });
+  return {
+    sessionId: backbones.id,
+    fingerprint: backbones.fingerprint,
+    urls,
+    serverRunning: !!info.running,
+  };
+});
+
+ipcMain.handle('backbones:join', async (_e, urlStr) => {
+  // 'joiner' opens a WS to the URL the friend supplied. Once open, exchange
+  // pubkeys, derive shared key, ready to chat.
+  if (backbones) backbones.close('replaced by new session');
+  let parsed;
+  try { parsed = new URL(urlStr); }
+  catch (_) { return { error: 'Not a valid URL.' }; }
+  if (!/^wss?:$/.test(parsed.protocol)) return { error: 'URL must start with ws:// or wss://' };
+  if (!parsed.searchParams.get('init')) return { error: 'URL is missing the &init= public key.' };
+
+  backbones = new BackBonesSession({ role: 'joiner' });
+  bindBackBonesEvents(backbones);
+  try {
+    // Use the global WebSocket (Node 22 supports it natively).
+    const ws = new WebSocket(urlStr);
+    return await new Promise((resolve) => {
+      const timer = setTimeout(() => {
+        try { ws.close(); } catch (_) {}
+        if (backbones) { backbones.close('connect timeout'); backbones = null; }
+        resolve({ error: 'Connection timed out. Is the friend\'s BonesAI running and reachable?' });
+      }, 8000);
+      ws.addEventListener('open', () => {
+        clearTimeout(timer);
+        // Wrap browser WebSocket to look enough like the ws lib's API for
+        // attachPeer (it uses .on / .send / .readyState / .close).
+        const adapter = {
+          readyState: 1,
+          send: (d) => ws.send(d),
+          close: () => ws.close(),
+          on: (ev, cb) => {
+            if (ev === 'message') ws.addEventListener('message', (m) => cb(Buffer.from(m.data || '')));
+            else if (ev === 'close') ws.addEventListener('close', () => cb());
+            else if (ev === 'error') ws.addEventListener('error', () => cb());
+          },
+        };
+        backbones.attachPeer(adapter);
+        // Initiator's pubkey came in the URL query — record it and send ours.
+        try {
+          backbones.setPeerKey(parsed.searchParams.get('init'));
+          backbones.sendHandshake();
+          backbones.emit('connected');
+        } catch (e) {
+          backbones.close('handshake failed: ' + e.message);
+          backbones = null;
+          resolve({ error: 'Handshake failed.' });
+          return;
+        }
+        resolve({ sessionId: backbones.id, fingerprint: backbones.fingerprint });
+      });
+      ws.addEventListener('error', () => {
+        clearTimeout(timer);
+        if (backbones) { backbones.close('connect error'); backbones = null; }
+        resolve({ error: 'Could not connect.' });
+      });
+    });
+  } catch (e) {
+    if (backbones) { backbones.close('connect threw'); backbones = null; }
+    return { error: e.message };
+  }
+});
+
+ipcMain.handle('backbones:send', (_e, text) => {
+  if (!backbones) return { error: 'no session' };
+  try { backbones.sendMessage(text); return { ok: true }; }
+  catch (e) { return { error: e.message }; }
+});
+
+ipcMain.handle('backbones:close', () => {
+  if (!backbones) return { ok: true };
+  backbones.close('user closed');
+  backbones = null;
+  return { ok: true };
+});
+
+ipcMain.handle('backbones:status', () => backbones ? backbones.status() : null);
 
 // --- Web server / network sharing ---
 ipcMain.handle('web:info', () => webServer.info());

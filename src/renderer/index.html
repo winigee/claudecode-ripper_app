@@ -26,7 +26,7 @@
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-bone">BONE</span><span class="brand-ai">SAI</span>
-        <span class="brand-version" id="brand-version">v2.14.2</span>
+        <span class="brand-version" id="brand-version">v2.15.0</span>
       </div>
 
       <button id="btn-new-chat" class="new-chat">+ New chat</button>
@@ -49,6 +49,7 @@
         <button data-tab="work" class="tab">Work</button>
         <button data-tab="absorb" class="tab">Absorb</button>
         <button data-tab="brain" class="tab">Brain</button>
+        <button data-tab="backbones" class="tab">BackBones</button>
         <button data-tab="settings" class="tab">Settings</button>
         <button data-tab="about" class="tab">About</button>
       </nav>
@@ -303,6 +304,60 @@
             <button id="btn-brain-back-from-detail">← Back to briefs</button>
           </div>
           <div id="brain-detail" class="brain-detail"></div>
+        </div>
+      </section>
+
+      <!-- BackBones — encrypted peer-to-peer chat. -->
+      <section id="tab-backbones" class="tab-panel">
+        <h2>BackBones</h2>
+
+        <!-- Idle / start screen -->
+        <div id="bb-view-idle" class="bb-view">
+          <p class="hint">Encrypted, peer-to-peer chat between you and a friend's BonesAI. Runs over Tailscale, end-to-end encrypted on top (X25519 + AES-256-GCM, fresh keys every session). <strong>Nothing is saved.</strong> Messages live in memory only; when the session closes, everything is wiped. Not in chat history. Not in Brain. Not on disk.</p>
+
+          <div class="bb-actions">
+            <div class="bb-action-card">
+              <h3>Host a session</h3>
+              <p class="hint">Generate a one-time URL. Send it to your friend out-of-band (Signal, paper). They paste, you're talking.</p>
+              <button id="btn-bb-start" class="primary">Start session</button>
+            </div>
+            <div class="bb-action-card">
+              <h3>Join a session</h3>
+              <p class="hint">Your friend hosted? Paste the URL they sent.</p>
+              <div class="row">
+                <input id="bb-join-url" type="text" placeholder="ws://friend-tailscale.ts.net:8765/ws/backbones?init=…" />
+                <button id="btn-bb-join" class="primary">Join</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Waiting (URL generated, peer not yet connected) -->
+        <div id="bb-view-waiting" class="bb-view" hidden>
+          <h3>Session ready — share the URL</h3>
+          <p class="hint">Send this URL to your friend. When they paste it into their BonesAI BackBones tab and hit Join, the session opens.</p>
+          <div id="bb-urls" class="bb-urls"></div>
+          <p class="hint">Verification code: <span id="bb-fingerprint" class="mono"></span> — once connected, both sides should show the same code. If they don't match, someone's tampered with the URL.</p>
+          <div class="row">
+            <button id="btn-bb-cancel" class="danger">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Active session — terminal-style chat -->
+        <div id="bb-view-active" class="bb-view" hidden>
+          <div class="bb-header">
+            <span class="bb-status-dot connected"></span>
+            <span class="bb-header-text">PHANTOM SESSION · encrypted · ephemeral</span>
+            <span id="bb-shared-fp" class="bb-fp"></span>
+            <button id="btn-bb-end" class="danger small">End</button>
+          </div>
+          <pre id="bb-terminal" class="bb-terminal"></pre>
+          <form id="bb-form" class="bb-form">
+            <span class="bb-prompt">&gt;</span>
+            <input id="bb-input" type="text" autocomplete="off" spellcheck="false" placeholder="message…" />
+            <button type="submit" class="bb-send">↵</button>
+          </form>
+          <p class="hint bb-warning">Strictly ephemeral. No screenshots prevented. Memory may be swapped to disk under pressure. Don't use for content where forensic recovery matters.</p>
         </div>
       </section>
 
@@ -599,6 +654,13 @@
           <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>
         </svg>
         <span>Absorb</span>
+      </button>
+      <button data-tab="backbones" class="tab btab" aria-label="BackBones">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="2" y="6" width="20" height="12" rx="2"/>
+          <path d="M6 12h12M9 9l-3 3 3 3M15 9l3 3-3 3"/>
+        </svg>
+        <span>BackBones</span>
       </button>
       <button data-tab="brain" class="tab btab" aria-label="Brain">
         <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

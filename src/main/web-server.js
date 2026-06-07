@@ -11,6 +11,7 @@ const path = require('path');
 const crypto = require('crypto');
 const os = require('os');
 const url = require('url');
+const { WebSocketServer } = require('ws');
 
 const config = require('./config');
 const llamaServer = require('./llama-server');
@@ -19,8 +20,14 @@ const brain = require('./brain');
 const chats = require('./chats');
 
 let server = null;
+let wss = null;
 let listening = null; // { host, port }
 const sseClients = new Set();
+
+// Hook for the main process to receive incoming BackBones connections.
+// Set by main.js once: backbones.attachIncoming(ws, pubKeyB64).
+let onIncomingBackBones = null;
+function setBackBonesHandler(fn) { onIncomingBackBones = fn; }
 
 function generateToken() {
   return crypto.randomBytes(24).toString('base64url');
@@ -330,6 +337,35 @@ async function start() {
   const cfg = getWebConfig();
   const host = cfg.share === 'lan' ? '0.0.0.0' : '127.0.0.1';
   server = http.createServer(handleRequest);
+
+  // Attach a WebSocket server for BackBones (encrypted peer-to-peer chat).
+  // Path /ws/backbones. The initiator's BackBones session pubkey is sent as
+  // ?init=<b64> on the connect URL; the joiner sends its own pubkey as the
+  // first 'hello' frame after the handshake completes.
+  wss = new WebSocketServer({ noServer: true });
+  server.on('upgrade', (req, socket, head) => {
+    const parsed = url.parse(req.url, true);
+    if (parsed.pathname !== '/ws/backbones') {
+      socket.destroy();
+      return;
+    }
+    // Auth: same bones-session cookie or ?t= token as the rest of the API.
+    if (!checkAuth(req, parsed)) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      const initiatorPub = parsed.query.init || null;
+      if (!initiatorPub) {
+        try { ws.close(1008, 'missing initiator key'); } catch (_) {}
+        return;
+      }
+      if (onIncomingBackBones) onIncomingBackBones(ws, initiatorPub);
+      else { try { ws.close(1011, 'no handler'); } catch (_) {} }
+    });
+  });
+
   await new Promise((resolve, reject) => {
     server.once('error', reject);
     server.listen(cfg.port, host, () => {
@@ -355,4 +391,4 @@ async function restart() {
   return start();
 }
 
-module.exports = { start, stop, restart, info, regenerateToken, updateWebConfig, getWebConfig };
+module.exports = { start, stop, restart, info, regenerateToken, updateWebConfig, getWebConfig, setBackBonesHandler };
