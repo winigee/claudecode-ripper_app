@@ -18,6 +18,23 @@ function logFilePath() {
   return path.join(app.getPath('userData'), 'llama-server.log');
 }
 
+// Rotate the log if it's grown past LOG_FILE_MAX_BYTES. Called once at module
+// load. The previous log (if any) is kept as .old; older still is overwritten.
+// Prevents the log from growing unbounded over weeks/months of use.
+const LOG_FILE_MAX_BYTES = 5 * 1024 * 1024; // 5 MB
+function rotateLogIfLarge() {
+  try {
+    const p = logFilePath();
+    const st = fs.statSync(p);
+    if (st.size > LOG_FILE_MAX_BYTES) {
+      const old = p + '.old';
+      try { fs.unlinkSync(old); } catch (_) {}
+      fs.renameSync(p, old);
+    }
+  } catch (_) { /* file doesn't exist yet — fine */ }
+}
+rotateLogIfLarge();
+
 // Append-only log file. Don't keep a long-lived write stream — just open,
 // write, flush, close for every line. Robust against ordering across spawns.
 function diskLog(line) {

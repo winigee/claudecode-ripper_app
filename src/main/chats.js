@@ -17,6 +17,12 @@ function newId() {
   return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 8);
 }
 
+// In-memory cache of the chat list. The renderer calls list() many times per
+// action (after delete, file, expand/collapse a project, etc.) — without a
+// cache every call re-reads N chat files from disk. Invalidated on any write.
+let _listCache = null;
+function invalidate() { _listCache = null; }
+
 function titleFromFirstMessage(messages) {
   const firstUser = messages.find((m) => m.role === 'user');
   if (!firstUser) return 'New chat';
@@ -26,11 +32,13 @@ function titleFromFirstMessage(messages) {
 }
 
 function list() {
+  if (_listCache) return _listCache;
   const out = [];
   let entries;
   try {
     entries = fs.readdirSync(chatsDir());
   } catch (_) {
+    _listCache = out;
     return out;
   }
   for (const name of entries) {
@@ -51,6 +59,7 @@ function list() {
     }
   }
   out.sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || ''));
+  _listCache = out;
   return out;
 }
 
@@ -125,6 +134,7 @@ function save(chat) {
     messages: chat.messages || [],
   };
   fs.writeFileSync(chatPath(id), JSON.stringify(data, null, 2));
+  invalidate();
   return data;
 }
 
@@ -135,12 +145,14 @@ function setProject(id, projectId) {
   data.project_id = projectId || null;
   data.updated_at = new Date().toISOString();
   fs.writeFileSync(chatPath(id), JSON.stringify(data, null, 2));
+  invalidate();
   return data;
 }
 
 function remove(id) {
   try {
     fs.unlinkSync(chatPath(id));
+    invalidate();
     return true;
   } catch (_) {
     return false;
@@ -153,6 +165,7 @@ function rename(id, title) {
   data.title = title;
   data.updated_at = new Date().toISOString();
   fs.writeFileSync(chatPath(id), JSON.stringify(data, null, 2));
+  invalidate();
   return data;
 }
 

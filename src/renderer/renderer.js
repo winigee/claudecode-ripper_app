@@ -323,8 +323,10 @@ async function refreshChatList() {
     }
   }
 
-  // Build the tree: top-level projects, each followed by its subprojects.
-  const topProjects = allProjects.filter((p) => !p.parent_id);
+  // Build the tree. A project is treated as top-level if it has no parent_id
+  // OR if its parent_id no longer exists (orphan — render at root so it stays
+  // visible and can be repaired). Subprojects appear under their parent.
+  const topProjects = allProjects.filter((p) => !p.parent_id || !validIds.has(p.parent_id));
   for (const top of topProjects) {
     root.appendChild(projectGroup(top, byProject.get(top.id) || []));
     const subs = allProjects.filter((p) => p.parent_id === top.id);
@@ -966,6 +968,28 @@ function bumpStreamMeter(el, label) {
 }
 function resetStreamMeter() { streamMeter.startedAt = 0; streamMeter.tokens = 0; }
 
+// Coalesced bubble re-render. Two reasons it has to be throttled: (1) for
+// Ask Claude the re-identify is a regex over the whole text so doing it per
+// token is O(N²); (2) updating textContent + scrolling per token thrashes
+// layout. rAF gives us one update per frame, which is still smooth.
+let _bubbleRenderQueued = false;
+function scheduleBubbleRender(isClaude) {
+  if (_bubbleRenderQueued || !state.pendingAgentEl) return;
+  _bubbleRenderQueued = true;
+  requestAnimationFrame(() => {
+    _bubbleRenderQueued = false;
+    if (!state.pendingAgentEl) return;
+    const c = state.pendingAgentEl.querySelector('.bubble-content');
+    if (!c) return;
+    const text = isClaude && state.askClaudeMap
+      ? reidentifyWithMap(state.pendingAgentText, state.askClaudeMap).text
+      : state.pendingAgentText;
+    c.textContent = text;
+    const root = $('#chat-messages');
+    if (root) root.scrollTop = root.scrollHeight;
+  });
+}
+
 // Token stream for both chat and work runs
 window.bones.onToken(({ runId, delta }) => {
   if (runId !== state.currentRunId) return;
@@ -979,15 +1003,11 @@ window.bones.onToken(({ runId, delta }) => {
       state.pendingAgentEl.innerHTML = `${mark}<div class="bubble-content"></div>${subtitle}<div class="streaming-meter"></div>`;
     }
     state.pendingAgentText += delta;
-    const c = state.pendingAgentEl.querySelector('.bubble-content');
-    // For Ask Claude, re-identify placeholders in the streaming text live so
-    // the user sees real names appear progressively rather than [PERSON_1].
-    if (c) c.textContent = isClaude && state.askClaudeMap
-      ? reidentifyWithMap(state.pendingAgentText, state.askClaudeMap).text
-      : state.pendingAgentText;
+    // Re-identify (Ask Claude) is O(N) per call — doing it on every token is
+    // O(N²) over a long reply. Coalesce with rAF so we only re-process the
+    // text once per frame (~60fps).
+    scheduleBubbleRender(isClaude);
     bumpStreamMeter(state.pendingAgentEl.querySelector('.streaming-meter'), isClaude ? 'Claude' : 'generating');
-    const root = $('#chat-messages');
-    root.scrollTop = root.scrollHeight;
     return;
   }
   // Cannon path (Claude API response)

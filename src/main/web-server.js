@@ -137,6 +137,10 @@ async function readBody(req) {
   });
 }
 
+// In-memory cache of static assets keyed by absolute path. Renderer files
+// (index.html, renderer.js, styles.css, icons) don't change while the app is
+// running, so we read each one from disk at most once per process.
+const STATIC_CACHE = new Map();
 function serveStatic(parsedUrl, res, extraHeaders = {}) {
   let pathname = parsedUrl.pathname;
   if (pathname === '/' || pathname === '') pathname = '/index.html';
@@ -144,10 +148,22 @@ function serveStatic(parsedUrl, res, extraHeaders = {}) {
   const safe = path.normalize(pathname).replace(/^[/\\]+/, '');
   const full = path.join(STATIC_DIR, safe);
   if (!full.startsWith(STATIC_DIR)) return send(res, 403, { error: 'forbidden' });
+
+  const cached = STATIC_CACHE.get(full);
+  if (cached) {
+    res.writeHead(200, {
+      'Content-Type': cached.ctype,
+      'Cache-Control': 'no-cache',
+      ...extraHeaders,
+    });
+    res.end(cached.buf);
+    return;
+  }
   fs.readFile(full, (err, buf) => {
     if (err) return send(res, 404, { error: 'not found' });
     const ext = path.extname(full).toLowerCase();
     const ctype = STATIC_MIME[ext] || 'application/octet-stream';
+    STATIC_CACHE.set(full, { buf, ctype });
     res.writeHead(200, {
       'Content-Type': ctype,
       'Cache-Control': 'no-cache',
