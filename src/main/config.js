@@ -81,48 +81,68 @@ function findModel(id) {
 function configPath() {
   return path.join(app.getPath('userData'), CONFIG_FILENAME);
 }
-function modelsDir() {
-  const p = path.join(app.getPath('userData'), 'models');
-  fs.mkdirSync(p, { recursive: true });
+// Remember which directories we've already ensured this process, so the hot
+// modelsDir()/runtimeDir() calls don't issue an mkdirSync syscall every time.
+const _ensuredDirs = new Set();
+function ensureDir(p) {
+  if (!_ensuredDirs.has(p)) {
+    fs.mkdirSync(p, { recursive: true });
+    _ensuredDirs.add(p);
+  }
   return p;
+}
+function modelsDir() {
+  return ensureDir(path.join(app.getPath('userData'), 'models'));
 }
 function modelPath(idOrFilename) {
   const m = findModel(idOrFilename);
   return path.join(modelsDir(), m ? m.filename : idOrFilename);
 }
 function runtimeDir() {
-  const p = path.join(app.getPath('userData'), 'runtime');
-  fs.mkdirSync(p, { recursive: true });
-  return p;
+  return ensureDir(path.join(app.getPath('userData'), 'runtime'));
 }
 function llamafilePath() {
   return path.join(runtimeDir(), 'llamafile');
 }
 
 // --- Settings file ---
+//
+// config.json is read on many code paths (status(), memory flags, web/api
+// settings…). Cache the parsed object in memory so repeated reads don't hit
+// disk; writeConfig refreshes the cache. The contract: callers treat the
+// returned object as read-modify-write and call writeConfig when they change
+// it — they never mutate it and leave it unsaved.
 
+let _configCache = null;
 function readConfig() {
+  if (_configCache) return _configCache;
   try {
-    return JSON.parse(fs.readFileSync(configPath(), 'utf8'));
+    _configCache = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
   } catch (err) {
-    if (err.code === 'ENOENT') return {};
+    if (err.code === 'ENOENT') { _configCache = {}; return _configCache; }
     throw err;
   }
+  return _configCache;
 }
 function writeConfig(cfg) {
   const p = configPath();
   fs.mkdirSync(path.dirname(p), { recursive: true });
   fs.writeFileSync(p, JSON.stringify(cfg, null, 2), { mode: 0o600 });
   try { fs.chmodSync(p, 0o600); } catch (_) {}
+  _configCache = cfg; // keep the cache coherent with what we just wrote
 }
 
 // --- Hardware detection & recommendation ---
 
+// Hardware doesn't change at runtime, so detect once and reuse. Saves an
+// os.cpus() + os.totalmem() pair on every status()/runtime query.
+let _hwCache = null;
 function detectHardware() {
-  const ramBytes = os.totalmem();
-  const ramGB = Math.round(ramBytes / 1024 / 1024 / 1024);
+  if (_hwCache) return _hwCache;
+  const ramGB = Math.round(os.totalmem() / 1024 / 1024 / 1024);
   // arch: 'x64' (Intel) | 'arm64' (Apple Silicon)
-  return { ramGB, arch: process.arch, cpus: os.cpus().length };
+  _hwCache = { ramGB, arch: process.arch, cpus: os.cpus().length };
+  return _hwCache;
 }
 
 // --- Context window (n_ctx for llamafile) ---
@@ -196,7 +216,27 @@ function modelMatchTokens(id) {
     .filter((t) => t.length >= 2);
 }
 
+// The model folder is scanned (readdir + per-file stat) on every status(),
+// listModels(), getActiveModelId() and activeModelPath() — i.e. constantly.
+// Cache the resolved path per id for a short window so a burst of those calls
+// shares one disk scan. The contents only change on download/delete/manual
+// drop; the first two call invalidateModelScan(), the last is picked up
+// within the TTL or via the "Re-scan models folder" button.
+const MODEL_SCAN_TTL_MS = 3000;
+let _modelScan = { at: 0, byId: new Map() };
+function invalidateModelScan() { _modelScan = { at: 0, byId: new Map() }; }
+
 function findInstalledFile(id) {
+  const now = Date.now();
+  if (now - _modelScan.at > MODEL_SCAN_TTL_MS) _modelScan = { at: now, byId: new Map() };
+  if (_modelScan.byId.has(id)) return _modelScan.byId.get(id);
+
+  const result = _resolveInstalledFile(id);
+  _modelScan.byId.set(id, result);
+  return result;
+}
+
+function _resolveInstalledFile(id) {
   const m = findModel(id);
   if (!m) return null;
   // 1. Canonical filename
@@ -295,6 +335,7 @@ module.exports = {
   listModels,
   findModel,
   findInstalledFile,
+  invalidateModelScan,
   getActiveModelId,
   setActiveModelId,
   isModelInstalled,

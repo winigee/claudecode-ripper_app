@@ -22,7 +22,6 @@ const chats = require('./chats');
 let server = null;
 let wss = null;
 let listening = null; // { host, port }
-const sseClients = new Set();
 
 // Hook for the main process to receive incoming BackBones connections.
 // Set by main.js once: backbones.attachIncoming(ws, pubKeyB64).
@@ -95,6 +94,15 @@ function parseCookies(header) {
 // manifest and the icons with whatever auth context it has, and it has no way
 // to know about the original ?t= URL. So the first hit also sets the cookie,
 // turning a query-string login into a session for subsequent subresources.
+// Constant-time token compare — avoids a timing side-channel that could let an
+// attacker on the LAN/Tailscale recover the token byte-by-byte.
+function tokenMatches(candidate, token) {
+  if (typeof candidate !== 'string' || typeof token !== 'string') return false;
+  const a = Buffer.from(candidate);
+  const b = Buffer.from(token);
+  if (a.length !== b.length) return false;
+  return crypto.timingSafeEqual(a, b);
+}
 function checkAuth(req, parsedUrl) {
   const cfg = getWebConfig();
   const headerTok =
@@ -104,9 +112,9 @@ function checkAuth(req, parsedUrl) {
   const cookies = parseCookies(req.headers.cookie);
   const cookieTok = cookies['bones-session'];
   return (
-    headerTok === cfg.token ||
-    queryTok === cfg.token ||
-    cookieTok === cfg.token
+    tokenMatches(headerTok, cfg.token) ||
+    tokenMatches(queryTok, cfg.token) ||
+    tokenMatches(cookieTok, cfg.token)
   );
 }
 
@@ -298,8 +306,8 @@ async function handleRequest(req, res) {
     // cookie so subsequent fetches (CSS, JS, manifest, icons) carry auth too.
     const cfg = getWebConfig();
     const cookies = parseCookies(req.headers.cookie);
-    const setCookie = (parsedUrl.query.t === cfg.token || parsedUrl.query.token === cfg.token)
-      && cookies['bones-session'] !== cfg.token
+    const cameViaQueryToken = tokenMatches(parsedUrl.query.t, cfg.token) || tokenMatches(parsedUrl.query.token, cfg.token);
+    const setCookie = cameViaQueryToken && !tokenMatches(cookies['bones-session'], cfg.token)
       ? { 'Set-Cookie': sessionCookieHeader(cfg.token) }
       : {};
     return serveStatic(parsedUrl, res, setCookie);

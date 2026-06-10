@@ -119,6 +119,7 @@
     modelDownloadSpecific: async () => ({ error: 'Model management is only available on the host Mac.' }),
     modelDelete: async () => ({ error: 'Model management is only available on the host Mac.' }),
     modelList: () => GET('/api/models').catch(() => []),
+    modelRescan: () => GET('/api/models').catch(() => []),
     modelHardware: () => GET('/api/models/hardware').catch(() => ({})),
     modelSetActive: async () => ({ error: 'Model management is only available on the host Mac.' }),
     modelCancel: () => ({ ok: true }),

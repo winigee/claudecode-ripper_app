@@ -230,6 +230,9 @@ ipcMain.handle('model:download-specific', async (event, modelId) => {
 ipcMain.handle('model:delete', (_e, modelId) => modelDownload.deleteModel(modelId));
 
 ipcMain.handle('model:list', () => config.listModels());
+// Explicit rescan: drop the cache so a just-dropped .gguf is picked up now
+// rather than within the scan TTL.
+ipcMain.handle('model:rescan', () => { config.invalidateModelScan(); return config.listModels(); });
 
 ipcMain.handle('model:hardware', () => ({
   ...config.detectHardware(),

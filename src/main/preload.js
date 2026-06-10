@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('bones', {
   modelDownloadSpecific: (id) => ipcRenderer.invoke('model:download-specific', id),
   modelDelete: (id) => ipcRenderer.invoke('model:delete', id),
   modelList: () => ipcRenderer.invoke('model:list'),
+  modelRescan: () => ipcRenderer.invoke('model:rescan'),
   modelHardware: () => ipcRenderer.invoke('model:hardware'),
   modelSetActive: (id) => ipcRenderer.invoke('model:set-active', id),
   modelCancel: () => ipcRenderer.invoke('model:cancel'),

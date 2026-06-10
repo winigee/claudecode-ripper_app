@@ -125,6 +125,7 @@ async function downloadModel(modelId, onProgress) {
     activeDownload = null;
     if (modelRes.cancelled) return { cancelled: true };
     if (modelRes.error) return { error: 'Model: ' + modelRes.error };
+    config.invalidateModelScan(); // new file on disk — drop the scan cache
     return { ok: true, modelId };
   } catch (err) {
     activeDownload = null;
@@ -145,6 +146,7 @@ async function deleteModel(modelId) {
     : null) || config.modelPath(modelId);
   try {
     fs.unlinkSync(target);
+    config.invalidateModelScan(); // file gone — drop the scan cache
     return { ok: true };
   } catch (err) {
     if (err.code === 'ENOENT') return { ok: true };

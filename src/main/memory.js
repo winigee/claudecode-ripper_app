@@ -16,6 +16,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { app } = require('electron');
+const config = require('./config');
 
 const FILE = 'memory.json';
 const ICLOUD_FOLDER = 'BonesAI';
@@ -43,24 +44,17 @@ function iCloudPath() {
   return path.join(iCloudDir(), FILE);
 }
 
+// The iCloud preference lives in the main config.json. Go through config's
+// cached read/write (no circular require — config depends on nothing here) so
+// the in-memory config cache stays coherent.
 function readFlag() {
-  // We stash the iCloud preference inside the memory config via the main
-  // config.json so it persists. Avoid a circular require by reading the file
-  // directly here.
-  try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'config.json'), 'utf8'));
-    return !!cfg.memory_icloud;
-  } catch (_) {
-    return false;
-  }
+  try { return !!config.readConfig().memory_icloud; }
+  catch (_) { return false; }
 }
 function writeFlag(on) {
-  const p = path.join(app.getPath('userData'), 'config.json');
-  let cfg = {};
-  try { cfg = JSON.parse(fs.readFileSync(p, 'utf8')); } catch (_) {}
+  const cfg = config.readConfig();
   cfg.memory_icloud = !!on;
-  fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+  config.writeConfig(cfg);
 }
 
 // The file we actually read/write right now.

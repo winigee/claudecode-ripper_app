@@ -2705,6 +2705,7 @@ async function refreshModelList() {
 if (document.getElementById('btn-rescan-models')) {
   $('#btn-rescan-models').addEventListener('click', async () => {
     setStatus('rescanning…', 'warn');
+    if (window.bones.modelRescan) await window.bones.modelRescan();
     await refreshModelList();
     setStatus('rescan complete', 'ok');
   });
