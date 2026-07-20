@@ -141,6 +141,7 @@ async function send({ prompt, material, model, system, messages }, { onToken, si
   let full = '';
 
   while (true) {
+    if (signal && signal.aborted) { try { await reader.cancel(); } catch (_) {} break; }
     const { value, done } = await reader.read();
     if (done) break;
     buf += decoder.decode(value, { stream: true });

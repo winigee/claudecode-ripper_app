@@ -347,6 +347,21 @@ body {
 .bb-warning { font-size: 11px; color: var(--warn); font-style: italic; }
 button.danger { color: var(--err); border-color: var(--err); background: transparent; }
 button.danger:hover { background: rgba(255, 123, 123, 0.1); }
+
+/* Prominent STOP control shown while an operation is generating — must read as
+   the obvious way to halt "Bones thinking", not a faint secondary button. */
+.btn-stop {
+  background: rgba(255, 123, 123, 0.16);
+  border: 1px solid var(--err);
+  color: var(--err);
+  font-weight: 600;
+  letter-spacing: 0.3px;
+  box-shadow: 0 0 10px rgba(255, 123, 123, 0.18);
+}
+.btn-stop:hover:not(:disabled) {
+  background: rgba(255, 123, 123, 0.3);
+  box-shadow: 0 0 14px rgba(255, 123, 123, 0.3);
+}
 button.small { padding: 3px 10px; font-size: 11px; min-height: 0; }
 
 /* Right-click context menu */

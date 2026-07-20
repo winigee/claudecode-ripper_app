@@ -208,6 +208,17 @@ if (sidebarToggleBtn) {
   });
 }
 
+// Stop the current operation. Cancels both the run and its redact sub-run —
+// Ask Claude / cannon redact the transcript under "<runId>-r" before the main
+// call, and a Stop click during the "redacting…" phase must hit that id too
+// (otherwise it silently no-ops). Cancelling a non-existent id is harmless.
+function stopRun() {
+  if (!state.currentRunId) return;
+  window.bones.cancelRun(state.currentRunId);
+  window.bones.cancelRun(state.currentRunId + '-r');
+  setStatus('stopping…', 'warn');
+}
+
 // ----- Status -----
 function setStatus(text, kind) {
   const el = $('#status');
@@ -964,7 +975,7 @@ $('#chat-form').addEventListener('submit', async (e) => {
 });
 
 $('#btn-chat-cancel').addEventListener('click', () => {
-  if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+  stopRun();
 });
 
 // ⌘↩ submit · ⌘⇧↩ ask Claude
@@ -1131,6 +1142,14 @@ async function askClaudeFromChat() {
       runId + '-r'
     );
     if (redactRes && redactRes.error) throw new Error(redactRes.error.message || 'redact failed');
+    // If the user hit Stop during the redaction phase, don't go on to send the
+    // (only partially-redacted) material to Claude — abort the whole flow.
+    if (redactRes && redactRes.cancelled) {
+      state.pendingAgentEl.classList.remove('thinking');
+      state.pendingAgentEl.innerHTML = '<div class="bubble-content muted">Stopped before sending.</div>';
+      setStatus('stopped', 'warn');
+      return;
+    }
 
     // 2. Stash the map so we can put real names back into Claude's reply.
     const map = {};
@@ -1408,7 +1427,7 @@ function renderFilesSummary() {
 $('#btn-summarise').addEventListener('click', () => run('summarise'));
 $('#btn-compact').addEventListener('click', () => run('compact'));
 $('#btn-cancel').addEventListener('click', () => {
-  if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+  stopRun();
 });
 
 async function run(kind) {
@@ -1576,7 +1595,7 @@ async function runSearch() {
 
 $('#btn-search').addEventListener('click', runSearch);
 $('#btn-search-cancel').addEventListener('click', () => {
-  if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+  stopRun();
 });
 $('#search-query').addEventListener('keydown', (e) => {
   if (e.key === 'Enter') { e.preventDefault(); runSearch(); }
@@ -1885,7 +1904,7 @@ $('#btn-absorb').addEventListener('click', async () => {
 });
 
 $('#btn-absorb-cancel').addEventListener('click', () => {
-  if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+  stopRun();
 });
 
 function showAbsorbModal() {
@@ -2027,6 +2046,7 @@ $('#btn-redact').addEventListener('click', async () => {
   const runId = 'rd-' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
   state.currentRunId = runId;
   $('#btn-redact').disabled = true;
+  $('#btn-redact-cancel').hidden = false;
   setStatus('redacting…', 'warn');
   try {
     const res = await window.bones.redact({ text: material, useModel: useModel && state.serverReady }, runId);
@@ -2063,9 +2083,12 @@ $('#btn-redact').addEventListener('click', async () => {
   } finally {
     state.currentRunId = null;
     $('#btn-redact').disabled = false;
+    $('#btn-redact-cancel').hidden = true;
     $('#redact-progress').hidden = true;
   }
 });
+
+$('#btn-redact-cancel').addEventListener('click', stopRun);
 
 // Keep edits to the redacted text as the source of truth for sending.
 $('#redact-output').addEventListener('input', (e) => { state.redactedText = e.target.value; });
@@ -2292,7 +2315,7 @@ $('#btn-cannon').addEventListener('click', async () => {
 });
 
 $('#btn-cannon-cancel').addEventListener('click', () => {
-  if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+  stopRun();
 });
 
 $('#btn-cannon-save-brain').addEventListener('click', async () => {
@@ -2480,7 +2503,7 @@ if (document.getElementById('btn-brain-new')) {
     }
   });
   $('#btn-brain-build-cancel').addEventListener('click', () => {
-    if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+    stopRun();
   });
 
   // Step 2 → Step 3: send the prompt to Claude.
@@ -2538,7 +2561,7 @@ if (document.getElementById('btn-brain-new')) {
     }
   });
   $('#btn-brain-send-cancel').addEventListener('click', () => {
-    if (state.currentRunId) window.bones.cancelRun(state.currentRunId);
+    stopRun();
   });
 
   // Save the brief into Brain storage.

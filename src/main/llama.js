@@ -77,6 +77,7 @@ async function chatStream({ system, user, onToken, signal, temperature = 0.3 }) 
   let full = '';
 
   while (true) {
+    if (signal && signal.aborted) { try { await reader.cancel(); } catch (_) {} break; }
     const { value, done } = await reader.read();
     if (done) break;
     buf += decoder.decode(value, { stream: true });
@@ -175,6 +176,7 @@ async function chat({ messages }, { onToken, signal } = {}) {
   let full = '';
 
   while (true) {
+    if (signal && signal.aborted) { try { await reader.cancel(); } catch (_) {} break; }
     const { value, done } = await reader.read();
     if (done) break;
     buf += decoder.decode(value, { stream: true });

@@ -26,7 +26,7 @@
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-bone">BONE</span><span class="brand-ai">SAI</span>
-        <span class="brand-version" id="brand-version">v2.17.3</span>
+        <span class="brand-version" id="brand-version">v2.18.0</span>
       </div>
 
       <button id="btn-new-chat" class="new-chat">+ New chat</button>
@@ -110,7 +110,7 @@
           <div id="chat-images" class="chat-images" hidden></div>
           <textarea id="chat-input" placeholder="Ask BonesAI… (⌘↩ to send · ⌘⇧↩ to ask Claude · paste a screenshot to ask Claude about it)" rows="2"></textarea>
           <div class="chat-form-row">
-            <button type="button" id="btn-chat-cancel" hidden>Cancel</button>
+            <button type="button" id="btn-chat-cancel" class="btn-stop" hidden>■ Stop</button>
             <button type="button" id="btn-chat-ask-claude" title="Anonymise the conversation, send to Claude, re-identify the reply">Ask Claude →</button>
             <button type="submit" id="btn-chat-send" class="primary">Send</button>
           </div>
@@ -138,7 +138,7 @@
           <div class="row search-row">
             <input id="search-query" type="text" placeholder="e.g. agreements mentioning early termination penalties" />
             <button id="btn-search" class="primary">Find</button>
-            <button id="btn-search-cancel" hidden>Cancel</button>
+            <button id="btn-search-cancel" class="btn-stop" hidden>■ Stop</button>
           </div>
           <label class="search-opt">
             <input type="checkbox" id="search-expand" checked />
@@ -154,6 +154,7 @@
           <p class="hint">Strip names, companies, and addresses from the loaded material, review the redacted version, then fire it at Claude via the API with a prompt of your choice. Nothing leaves the Mac until you press Send. When the reply comes back, Bones puts the real names back automatically.</p>
           <div class="row">
             <button id="btn-redact" class="primary">REDACT</button>
+            <button id="btn-redact-cancel" class="btn-stop" hidden>■ Stop</button>
             <label class="search-opt">
               <input type="checkbox" id="redact-model" checked />
               Also use the local model to catch plain names (slower, stays private)
@@ -175,7 +176,7 @@
             <div class="row cannon-fire">
               <span class="muted" id="cannon-model-label"></span>
               <button id="btn-cannon" class="primary">Send to Claude →</button>
-              <button id="btn-cannon-cancel" hidden>Cancel</button>
+              <button id="btn-cannon-cancel" class="btn-stop" hidden>■ Stop</button>
             </div>
             <p id="cannon-nokey" class="hint" hidden>No API key set. Add one in <strong>Settings → Claude API</strong> to use the cannon.</p>
             <pre id="cannon-output" class="cannon-output"></pre>
@@ -197,7 +198,7 @@
         <div class="actions">
           <button id="btn-summarise" class="primary">Summarise</button>
           <button id="btn-compact">Compact</button>
-          <button id="btn-cancel" hidden>Cancel</button>
+          <button id="btn-cancel" class="btn-stop" hidden>■ Stop</button>
           <button id="btn-save-brain" disabled>Save to Brain</button>
         </div>
         <pre id="output"></pre>
@@ -220,7 +221,7 @@
 
         <div class="row">
           <button id="btn-absorb" class="primary">Absorb loaded files</button>
-          <button id="btn-absorb-cancel" hidden>Cancel</button>
+          <button id="btn-absorb-cancel" class="btn-stop" hidden>■ Stop</button>
         </div>
         <div id="absorb-progress" class="search-progress muted" hidden></div>
 
@@ -271,7 +272,7 @@
             </div>
             <div class="row">
               <button id="btn-brain-build" class="primary">Build research prompt</button>
-              <button id="btn-brain-build-cancel" hidden>Cancel</button>
+              <button id="btn-brain-build-cancel" class="btn-stop" hidden>■ Stop</button>
             </div>
             <div id="brain-build-progress" class="prog-host" hidden></div>
           </div>
@@ -282,7 +283,7 @@
             <div class="row brain-send-row">
               <span class="muted" id="brain-model-label"></span>
               <button id="btn-brain-send" class="primary">Send to Claude →</button>
-              <button id="btn-brain-send-cancel" hidden>Cancel</button>
+              <button id="btn-brain-send-cancel" class="btn-stop" hidden>■ Stop</button>
             </div>
             <p id="brain-nokey" class="hint" hidden>No API key set. Add one in <strong>Settings → Claude API</strong> to send research.</p>
           </div>

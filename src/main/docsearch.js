@@ -196,10 +196,13 @@ async function search({ files, query, expand = true, maxResults = 12 }, { onProg
   for (const t of expanded) if (!weighted.has(t)) weighted.set(t, 0.5);
   const fullQueryLower = query.trim().toLowerCase();
 
-  // Stage 2: lexical ranking over every document.
+  // Stage 2: lexical ranking over every document. Check the abort signal per
+  // file so a Stop during a large scan is acted on promptly rather than only
+  // after every file has been scored.
   report('scanning', { total: files.length });
   const scored = [];
   for (const f of files) {
+    if (signal && signal.aborted) { cancelled = true; break; }
     const chunks = chunkText(f.text || '');
     let best = { score: 0, matched: new Set(), text: '' };
     let matchingChunks = 0;
