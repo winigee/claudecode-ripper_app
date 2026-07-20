@@ -721,6 +721,10 @@ let _lastCtxAnchor = { x: 0, y: 0 };
 function startNewChat() {
   state.currentChatId = null;
   state.currentMessages = [];
+  // Always bring the user to the Chat view — "+ New chat" from Settings/Work/
+  // anywhere should land on a fresh chat, not just reset state behind the
+  // current tab.
+  activateTab('chat');
   renderMessages();
   refreshChatList();
   $('#chat-input').focus();
