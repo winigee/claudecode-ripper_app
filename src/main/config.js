@@ -116,18 +116,59 @@ function llamafilePath() {
 let _configCache = null;
 function readConfig() {
   if (_configCache) return _configCache;
-  try {
-    _configCache = JSON.parse(fs.readFileSync(configPath(), 'utf8'));
-  } catch (err) {
-    if (err.code === 'ENOENT') { _configCache = {}; return _configCache; }
-    throw err;
+  const p = configPath();
+  // Try the primary file, then the backup (in case the primary was left
+  // corrupt by a pre-atomic-write crash). Only fall back to {} if neither is
+  // readable — and even then, the "refuse empty" guard in writeConfig stops us
+  // from persisting that empty state over good data.
+  for (const f of [p, p + '.bak']) {
+    try {
+      _configCache = JSON.parse(fs.readFileSync(f, 'utf8'));
+      return _configCache;
+    } catch (err) {
+      if (err.code === 'ENOENT') continue;
+      // parse error or other — try the backup next
+    }
   }
+  _configCache = {};
   return _configCache;
 }
+function _readFileConfig(f) {
+  try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch (_) { return null; }
+}
+
 function writeConfig(cfg) {
   const p = configPath();
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.writeFileSync(p, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+
+  // SAFEGUARD: never drop an existing API key. There is no "delete key" flow —
+  // setKey only ever writes a non-empty value — so a config being written
+  // without api.key while one exists on disk is always a bug, not intent.
+  // Carry the previous key forward. This is what stops the key-loss the user
+  // reported, regardless of which write path triggered it.
+  if (!(cfg.api && cfg.api.key)) {
+    const prev = _readFileConfig(p) || _readFileConfig(p + '.bak');
+    if (prev && prev.api && prev.api.key) {
+      cfg.api = { ...(cfg.api || {}), key: prev.api.key };
+    }
+  }
+
+  // Atomic write: serialise to a temp file, fsync it to disk, keep a backup of
+  // the previous good file, then rename over the real file. rename() is atomic
+  // on macOS, so a crash / force-quit mid-write can never leave config.json
+  // truncated or empty.
+  const data = JSON.stringify(cfg, null, 2);
+  if (!data || data.length < 2) throw new Error('refusing to write empty config');
+  const tmp = p + '.' + process.pid + '.tmp';
+  const fd = fs.openSync(tmp, 'w', 0o600);
+  try {
+    fs.writeSync(fd, data);
+    fs.fsyncSync(fd);
+  } finally {
+    fs.closeSync(fd);
+  }
+  try { if (fs.existsSync(p)) fs.copyFileSync(p, p + '.bak'); } catch (_) {}
+  fs.renameSync(tmp, p);
   try { fs.chmodSync(p, 0o600); } catch (_) {}
   _configCache = cfg; // keep the cache coherent with what we just wrote
 }
