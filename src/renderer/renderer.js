@@ -806,7 +806,28 @@ function bubbleFor(message) {
   if (isClaude) cls += ' via-claude';
   div.className = cls;
   if (message.role === 'user') {
-    div.textContent = message.content;
+    // Live image thumbnails (_images) render above the text; persisted history
+    // shows a small note instead.
+    if (message._images && message._images.length) {
+      const imgs = document.createElement('div');
+      imgs.className = 'bubble-images';
+      for (const src of message._images) {
+        const im = document.createElement('img');
+        im.src = src; im.alt = 'attachment';
+        imgs.appendChild(im);
+      }
+      div.appendChild(imgs);
+      const txt = document.createElement('div');
+      txt.textContent = message.content;
+      div.appendChild(txt);
+    } else if (message.hadImages) {
+      div.innerHTML = `<div class="bubble-imgnote">🖼 ${message.hadImages} image(s) sent to Claude</div>`;
+      const txt = document.createElement('div');
+      txt.textContent = message.content;
+      div.appendChild(txt);
+    } else {
+      div.textContent = message.content;
+    }
   } else {
     const tag = message.model ? `<div class="via-claude-note">${escapeHtml(isClaude ? 'via ' + message.model : message.model)}</div>` : '';
     div.innerHTML = `<div class="bubble-content">${escapeHtml(message.content || '')}</div>${tag}`;
@@ -870,6 +891,12 @@ $('#chat-form').addEventListener('submit', async (e) => {
   if (state.currentRunId) return; // already running
   const input = $('#chat-input');
   const text = input.value.trim();
+  // Images can only go to Claude (local models are text-only), so a plain Send
+  // with an attachment is routed to Ask Claude automatically.
+  if (state.pendingImages && state.pendingImages.length) {
+    setStatus('image → routing to Claude', 'warn');
+    return askClaudeFromChat();
+  }
   if (!text) return;
   if (!state.serverReady) {
     setStatus('model not ready', 'err');
@@ -954,11 +981,109 @@ $('#chat-input').addEventListener('keydown', (e) => {
 // history visibly shows which turns came from where.
 $('#btn-chat-ask-claude').addEventListener('click', askClaudeFromChat);
 
+// ----- Chat image attachments (Ask Claude only — local models are text-only) -----
+// Images live in memory for the current compose only. They are sent to Claude
+// (multimodal) under the commercial API + DPA. They are NOT persisted into the
+// saved chat (that would bloat chats.json with base64) and are NOT sent to the
+// local model, which can't see them.
+state.pendingImages = state.pendingImages || []; // [{ dataUrl, mediaType, b64 }]
+
+const MAX_IMG_EDGE = 1568; // Anthropic's recommended max long edge
+const MAX_IMAGES = 4;
+
+// Downscale a large image via canvas and return { mediaType, b64, dataUrl }.
+// Uses a FileReader data URL (not a blob: URL) to stay within the page CSP,
+// which allows `data:` images but not `blob:`.
+function processImageBlob(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        let { width, height } = img;
+      const scale = Math.min(1, MAX_IMG_EDGE / Math.max(width, height));
+      width = Math.round(width * scale);
+      height = Math.round(height * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      // JPEG keeps screenshots small; PNG kept only if it had transparency
+      // isn't worth detecting here — JPEG at 0.85 is fine for screenshots.
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        const b64 = dataUrl.split(',')[1];
+        resolve({ mediaType: 'image/jpeg', b64, dataUrl });
+      };
+      img.onerror = () => reject(new Error('bad image'));
+      img.src = reader.result; // data: URL
+    };
+    reader.readAsDataURL(blob);
+  });
+}
+
+async function addChatImage(blob) {
+  if (state.pendingImages.length >= MAX_IMAGES) {
+    setStatus(`max ${MAX_IMAGES} images`, 'warn');
+    return;
+  }
+  try {
+    const processed = await processImageBlob(blob);
+    state.pendingImages.push(processed);
+    renderChatImages();
+  } catch (_) { setStatus('couldn\'t read image', 'err'); }
+}
+
+function renderChatImages() {
+  const strip = $('#chat-images');
+  if (!strip) return;
+  if (state.pendingImages.length === 0) { strip.hidden = true; strip.innerHTML = ''; return; }
+  strip.hidden = false;
+  strip.innerHTML = '';
+  state.pendingImages.forEach((im, i) => {
+    const thumb = document.createElement('div');
+    thumb.className = 'chat-img-thumb';
+    thumb.innerHTML = `<img src="${im.dataUrl}" alt="attachment"/><button class="chat-img-x" title="Remove">×</button><span class="chat-img-tag">→ Claude</span>`;
+    thumb.querySelector('.chat-img-x').addEventListener('click', () => {
+      state.pendingImages.splice(i, 1);
+      renderChatImages();
+    });
+    strip.appendChild(thumb);
+  });
+}
+
+// Paste a screenshot into the chat input.
+if (document.getElementById('chat-input')) {
+  $('#chat-input').addEventListener('paste', (e) => {
+    const items = (e.clipboardData && e.clipboardData.items) || [];
+    for (const it of items) {
+      if (it.type && it.type.startsWith('image/')) {
+        e.preventDefault();
+        const blob = it.getAsFile();
+        if (blob) addChatImage(blob);
+      }
+    }
+  });
+  // Drag an image file onto the chat area.
+  const chatArea = document.getElementById('tab-chat');
+  if (chatArea) {
+    chatArea.addEventListener('dragover', (e) => {
+      if (e.dataTransfer && Array.from(e.dataTransfer.items || []).some((it) => it.type.startsWith('image/'))) {
+        e.preventDefault();
+      }
+    });
+    chatArea.addEventListener('drop', (e) => {
+      const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []).filter((f) => f.type.startsWith('image/'));
+      if (files.length) { e.preventDefault(); files.forEach(addChatImage); }
+    });
+  }
+}
+
 async function askClaudeFromChat() {
   if (state.currentRunId) return;
   const input = $('#chat-input');
   const text = input.value.trim();
-  if (!text) return;
+  const images = state.pendingImages.slice();
+  if (!text && images.length === 0) return;
   // Confirm Claude key is set before doing any work.
   const ks = await window.bones.claudeKeyStatus();
   if (!ks || !ks.hasKey) {
@@ -966,7 +1091,15 @@ async function askClaudeFromChat() {
     return;
   }
   input.value = '';
-  state.currentMessages.push({ role: 'user', content: text });
+  // Clear the composer's image strip now; we carry `images` locally.
+  state.pendingImages = [];
+  renderChatImages();
+  // _images (data URLs) are for live display only — stripped before persisting.
+  state.currentMessages.push({
+    role: 'user',
+    content: text || (images.length ? '(screenshot)' : ''),
+    _images: images.length ? images.map((im) => im.dataUrl) : undefined,
+  });
   renderMessages();
 
   // Append the assistant bubble up front so the user sees something is
@@ -1004,6 +1137,28 @@ async function askClaudeFromChat() {
     //    preserving multi-turn structure for Claude.
     const messages = splitTranscriptToMessages(redactRes.text || transcript);
 
+    // 3b. Attach any images to the final user message as content blocks. Images
+    //     can't be redacted (they're pixels), so they go to Claude as-is under
+    //     the commercial API + DPA. Only the Ask Claude path supports them.
+    if (images.length) {
+      for (let i = messages.length - 1; i >= 0; i--) {
+        if (messages[i].role === 'user') {
+          const priorText = messages[i].content;
+          messages[i] = {
+            role: 'user',
+            content: [
+              ...(priorText ? [{ type: 'text', text: priorText }] : []),
+              ...images.map((im) => ({
+                type: 'image',
+                source: { type: 'base64', media_type: im.mediaType, data: im.b64 },
+              })),
+            ],
+          };
+          break;
+        }
+      }
+    }
+
     // 4. Stream the response.
     setStatus('asking Claude…', 'warn');
     const res = await window.bones.claudeSend({ messages }, runId);
@@ -1024,8 +1179,12 @@ async function askClaudeFromChat() {
       }
       state.currentMessages.push({ role: 'assistant', content: filled.text, model: res.model || 'claude' });
     }
-    // 6. Persist the chat with the model tag preserved.
-    const saved = await window.bones.chatSave({ id: state.currentChatId, messages: state.currentMessages });
+    // 6. Persist the chat with the model tag preserved. Strip _images (live
+    //    display-only data URLs) so chats.json doesn't balloon with base64.
+    const saved = await window.bones.chatSave({
+      id: state.currentChatId,
+      messages: state.currentMessages.map(({ _images, ...m }) => (_images ? { ...m, hadImages: _images.length } : m)),
+    });
     if (saved && saved.id) {
       state.currentChatId = saved.id;
       if (state.pendingProjectId) {

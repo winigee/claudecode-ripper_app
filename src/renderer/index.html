@@ -26,7 +26,7 @@
     <aside class="sidebar">
       <div class="brand">
         <span class="brand-bone">BONE</span><span class="brand-ai">SAI</span>
-        <span class="brand-version" id="brand-version">v2.16.0</span>
+        <span class="brand-version" id="brand-version">v2.17.0</span>
       </div>
 
       <button id="btn-new-chat" class="new-chat">+ New chat</button>
@@ -107,7 +107,8 @@
           </div>
         </div>
         <form id="chat-form" class="chat-form">
-          <textarea id="chat-input" placeholder="Ask BonesAI… (⌘↩ to send · ⌘⇧↩ to ask Claude)" rows="2"></textarea>
+          <div id="chat-images" class="chat-images" hidden></div>
+          <textarea id="chat-input" placeholder="Ask BonesAI… (⌘↩ to send · ⌘⇧↩ to ask Claude · paste a screenshot to ask Claude about it)" rows="2"></textarea>
           <div class="chat-form-row">
             <button type="button" id="btn-chat-cancel" hidden>Cancel</button>
             <button type="button" id="btn-chat-ask-claude" title="Anonymise the conversation, send to Claude, re-identify the reply">Ask Claude →</button>
