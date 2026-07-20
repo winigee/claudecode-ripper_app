@@ -9,8 +9,31 @@ const config = require('./config');
 
 const ENDPOINT = 'https://api.anthropic.com/v1/messages';
 const API_VERSION = '2023-06-01';
-const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_MODEL = 'claude-sonnet-5';
 const MAX_TOKENS = 4096;
+
+// Map model ids that BonesAI shipped historically to their current API ids, so
+// a config saved with an old value still resolves to a real model. Anthropic
+// returns 404 for unknown model ids; this keeps existing users working.
+const MODEL_ALIASES = {
+  'claude-sonnet-4-6': 'claude-sonnet-5',
+  'claude-sonnet-4-5': 'claude-sonnet-5',
+};
+function resolveModel(m) {
+  return MODEL_ALIASES[m] || m || DEFAULT_MODEL;
+}
+
+// API keys never contain whitespace, so strip ALL of it (not just the ends) —
+// a stray space or newline from copying is the most common cause of a 401
+// "API key is invalid" on a key the user believes is correct. Also strip
+// surrounding quotes and an accidental "Bearer " prefix.
+function sanitiseKey(k) {
+  return String(k || '')
+    .replace(/\s+/g, '')
+    .replace(/^["']+|["']+$/g, '')
+    .replace(/^Bearer/i, '')
+    .trim();
+}
 
 const CANNON_SYSTEM =
   'You are assisting with analysis of de-identified material. Names of people, '
@@ -26,8 +49,8 @@ function getApiConfig() {
   const cfg = config.readConfig();
   const api = cfg.api || {};
   return {
-    key: api.key || '',
-    model: api.model || DEFAULT_MODEL,
+    key: sanitiseKey(api.key || ''), // sanitise on read too, in case an old config stored a dirty value
+    model: resolveModel(api.model),
   };
 }
 
@@ -36,20 +59,21 @@ function keyStatus() {
   return {
     hasKey: !!a.key,
     last4: a.key ? a.key.slice(-4) : null,
+    keyLength: a.key ? a.key.length : 0, // helps diagnose truncation without exposing the key
     model: a.model,
   };
 }
 
 function setKey(key) {
   const cfg = config.readConfig();
-  cfg.api = { ...(cfg.api || {}), key: (key || '').trim() };
+  cfg.api = { ...(cfg.api || {}), key: sanitiseKey(key) };
   config.writeConfig(cfg);
   return keyStatus();
 }
 
 function setModel(model) {
   const cfg = config.readConfig();
-  cfg.api = { ...(cfg.api || {}), model: model || DEFAULT_MODEL };
+  cfg.api = { ...(cfg.api || {}), model: resolveModel(model) };
   config.writeConfig(cfg);
   return keyStatus();
 }
@@ -80,7 +104,7 @@ async function send({ prompt, material, model, system, messages }, { onToken, si
   }
 
   const body = {
-    model: model || a.model,
+    model: resolveModel(model) || a.model,
     max_tokens: MAX_TOKENS,
     stream: true,
     system: system || CANNON_SYSTEM,

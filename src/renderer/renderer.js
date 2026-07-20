@@ -2711,7 +2711,9 @@ async function refreshApiSettings() {
     return;
   }
   if (st && st.hasKey) {
-    status.textContent = `Key saved (…${st.last4}). Sending via ${st.model}.`;
+    // Show length so a truncated/mangled key is visible (real keys are ~100+ chars).
+    const lenNote = st.keyLength ? ` · ${st.keyLength} chars` : '';
+    status.textContent = `Key saved (ends …${st.last4}${lenNote}). Sending via ${st.model}.`;
   } else {
     status.textContent = 'No key set. Get one at console.anthropic.com.';
   }
