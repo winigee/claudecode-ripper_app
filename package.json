@@ -24,6 +24,7 @@
   },
   "build": {
     "appId": "com.winstongreen.bonesai",
+    "npmRebuild": false,
     "productName": "BonesAI",
     "copyright": "Copyright © 2026 Winston Green",
     "directories": {
