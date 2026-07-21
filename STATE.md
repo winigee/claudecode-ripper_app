@@ -40,7 +40,7 @@ git add -A && git commit -m "..." && git push -u origin claude/bold-brahmagupta-
 ## Current release
 
 - **v2.15.0** — commit `0ef2c7e`.
-- `releases/BonesAI-v2.15.0-mac-x64.app.zip` (~90 MB).
+- `releases/BonesAI-v2.19.0-mac-x64.app.zip` (~90 MB).
 
 ## Architecture map
 

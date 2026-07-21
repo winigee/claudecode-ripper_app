@@ -2727,10 +2727,43 @@ if (document.getElementById('perf-context')) {
   });
 }
 
+// Masthead "Claude" indicator — always visible so you know at a glance whether
+// a key is installed, without opening Settings. Green when connected, muted/
+// red when no key. Clicking it jumps to Settings → Claude API.
+async function refreshClaudeIndicator() {
+  const el = document.getElementById('claude-indicator');
+  if (!el) return;
+  if (!window.bones.claudeKeyStatus) { el.hidden = true; return; }
+  let st;
+  try { st = await window.bones.claudeKeyStatus(); } catch (_) { st = null; }
+  if (st && st.host === false) { el.hidden = true; return; } // browser/PWA — host only
+  el.hidden = false;
+  const on = !!(st && st.hasKey);
+  el.classList.toggle('connected', on);
+  el.classList.toggle('disconnected', !on);
+  const txt = el.querySelector('.ci-text');
+  if (txt) txt.textContent = on ? 'Claude connected' : 'Claude — no key';
+  el.title = on
+    ? `Claude API key installed (ends …${st.last4}). Model: ${st.model}. Click for Settings.`
+    : 'No Claude API key — click to add one in Settings.';
+}
+
+if (document.getElementById('claude-indicator')) {
+  document.getElementById('claude-indicator').addEventListener('click', () => {
+    activateTab('settings');
+    // Jump the Settings sub-nav to the Claude API card.
+    const pill = document.querySelector('.snav[data-jump="setting-api"]');
+    if (pill) pill.click();
+    const el = document.getElementById('api-key');
+    if (el) setTimeout(() => el.focus(), 50);
+  });
+}
+
 async function refreshApiSettings() {
   if (!window.bones.claudeKeyStatus) return;
   const st = await window.bones.claudeKeyStatus();
   const status = $('#api-key-status');
+  refreshClaudeIndicator(); // keep the masthead in sync whenever settings refresh
   if (st && st.host === false) {
     // Browser-served renderer — hide the whole API section.
     const sec = $('#setting-api');
@@ -3009,3 +3042,4 @@ setAboutVersion();
 renderFilesSummary();
 renderAbsorbFilesSummary();
 refreshContextMeter();
+refreshClaudeIndicator();

@@ -69,6 +69,38 @@ body {
   font-family: ui-monospace, Menlo, monospace;
 }
 
+/* Claude connection indicator in the masthead */
+.claude-indicator {
+  -webkit-app-region: no-drag;
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 8px 16px 0;
+  padding: 4px 10px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 11px;
+  letter-spacing: 0.3px;
+  color: var(--text-dim);
+  cursor: pointer;
+  width: fit-content;
+}
+.claude-indicator:hover { border-color: var(--border-hi); color: var(--text); }
+.claude-indicator .ci-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--muted);
+  flex-shrink: 0;
+}
+.claude-indicator.connected .ci-dot {
+  background: #d97757; /* Claude orange */
+  box-shadow: 0 0 8px rgba(217, 119, 87, 0.55);
+}
+.claude-indicator.connected { color: #e89d70; border-color: rgba(217, 119, 87, 0.4); }
+.claude-indicator.disconnected .ci-dot { background: var(--muted); }
+.claude-indicator.disconnected .ci-text { color: var(--muted); }
+
 .new-chat {
   margin: 0 12px 8px;
   background: linear-gradient(180deg, #1c4f78, #14385a);
